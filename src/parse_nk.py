@@ -10,7 +10,8 @@ use_cuda = torch.cuda.is_available()
 if use_cuda:
     torch_t = torch.cuda
     def from_numpy(ndarray):
-        return torch.from_numpy(ndarray).pin_memory().cuda(async=True)
+        return torch.from_numpy(ndarray).pin_memory().cuda(non_blocking = True)
+    print("USING CUDA")
 else:
     print("Not using CUDA!")
     torch_t = torch
@@ -566,7 +567,7 @@ def get_elmo_class():
 # %%
 def get_bert(bert_model, bert_do_lower_case):
     # Avoid a hard dependency on BERT by only importing it if it's being used
-    from pytorch_pretrained_bert import BertTokenizer, BertModel
+    from pytorch_transformers import BertTokenizer, BertModel
     if bert_model.endswith('.tar.gz'):
         tokenizer = BertTokenizer.from_pretrained(bert_model.replace('.tar.gz', '-vocab.txt'), do_lower_case=bert_do_lower_case)
     else:
