@@ -1016,7 +1016,9 @@ class NKChartParser(nn.Module):
             all_word_end_mask = from_numpy(np.ascontiguousarray(all_word_end_mask[:, :subword_max_len]))
             all_encoder_layers, _ = self.bert(all_input_ids, attention_mask=all_input_mask)
             del _
-            features = all_encoder_layers[-1]
+            #features = all_encoder_layers[-1]
+            # the new pytorch-transformers returns the output from the last layer
+            features = all_encoder_layers
 
             if self.encoder is not None:
                 features_packed = features.masked_select(all_word_end_mask.to(torch.uint8).unsqueeze(-1)).reshape(-1, features.shape[-1])
