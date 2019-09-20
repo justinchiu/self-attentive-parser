@@ -381,11 +381,24 @@ def run_test(args):
     print("Parsing test sentences...")
     start_time = time.time()
 
+    if args.nn_prefix is not None:
+        from annoy import AnnoyIndex
+        t = AnnoyIndex(250, "dot")
+        t.load(f"{args.nn_prefix}.ann")
+        span_info = pickle.load(open(f"{args.nn_prefix}.info", "rb"))
+    index_and_span_info = (t, span_info) if args.nn_prefix is not None else None
+
     test_predicted = []
     for start_index in range(0, len(test_treebank), args.eval_batch_size):
-        subbatch_trees = test_treebank[start_index:start_index+args.eval_batch_size].cpu()
-        subbatch_sentences = [[(leaf.tag, leaf.word) for leaf in tree.leaves()] for tree in subbatch_trees]
-        predicted, _ = parser.parse_batch(subbatch_sentences)
+        subbatch_trees = test_treebank[start_index:start_index+args.eval_batch_size]
+        subbatch_sentences = [
+            [(leaf.tag, leaf.word) for leaf in tree.leaves()]
+            for tree in subbatch_trees
+        ]
+        predicted, _ = parser.parse_batch(
+            subbatch_sentences,
+            index_and_span_info = index_and_span_info,
+        )
         del _
         test_predicted.extend([p.convert() for p in predicted])
 
@@ -402,7 +415,12 @@ def run_test(args):
         print("Comparing with raw trees from", args.test_path_raw)
         ref_gold_path = args.test_path_raw
 
-    test_fscore = evaluate.evalb(args.evalb_dir, test_treebank, test_predicted, ref_gold_path=ref_gold_path)
+    test_fscore = evaluate.evalb(
+        args.evalb_dir,
+        test_treebank,
+        test_predicted,
+        ref_gold_path=ref_gold_path,
+    )
 
     print(
         "test-fscore {} "
@@ -622,10 +640,10 @@ def run_index(args):
         #span_reps.extend([x.cpu() for x in span_representations])
     # build and save index
     t.build(16)
-    t.save("all_spans.ann")
+    t.save(f"{args.nn_prefix}.ann")
 
     # save info for index: [(label, train_index, left, right)]
-    pickle.dump(span_info, open("all_spans.info", "wb"))
+    pickle.dump(span_info, open(f"{args.nn_prefix}.info", "wb"))
 
 
 
@@ -656,6 +674,7 @@ def main():
     subparser.add_argument("--test-path", default="data/23.auto.clean")
     subparser.add_argument("--test-path-raw", type=str)
     subparser.add_argument("--eval-batch-size", type=int, default=100)
+    subparser.add_argument("--nn-prefix", default=None)
 
     subparser = subparsers.add_parser("ensemble")
     subparser.set_defaults(callback=run_ensemble)
@@ -686,6 +705,7 @@ def main():
     subparser.add_argument("--batch-size", type=int, default=256)
     subparser.add_argument("--subbatch-max-tokens", type=int, default=2000)
     subparser.add_argument("--index-path", default="index/en_bert")
+    subparser.add_argument("--nn-prefix", default="all_spans", required=True)
 
     args = parser.parse_args()
     args.callback(args)

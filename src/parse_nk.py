@@ -752,12 +752,13 @@ class NKChartParser(nn.Module):
             self.embedding = None
             self.encoder = None
 
-        self.f_label = nn.Sequential(
+        self.f_rep = nn.Sequential(
             nn.Linear(hparams.d_model, hparams.d_label_hidden),
             LayerNormalization(hparams.d_label_hidden),
             nn.ReLU(),
-            nn.Linear(hparams.d_label_hidden, label_vocab.size - 1),
-            )
+        )
+
+        self.label_proj = nn.Linear(hparams.d_label_hidden, label_vocab.size - 1)
 
         if hparams.predict_tags:
             assert not hparams.use_tags, "use_tags and predict_tags are mutually exclusive"
@@ -804,6 +805,24 @@ class NKChartParser(nn.Module):
         if use_cuda:
             res.cpu()
         if not hparams['use_elmo']:
+            # Update to new model names
+            if "f_label.0.weight" in model:
+                f_rep_keys = [
+                    'f_label.0.weight',
+                    'f_label.0.bias',
+                    'f_label.1.a_2',
+                    'f_label.1.b_2',
+                    #'f_label.3.weight',
+                    #'f_label.3.bias',
+                ]
+                for key in f_rep_keys:
+                    model[key.replace("label", "rep")] = model[key]
+                    del model[key]
+                model["label_proj.weight"] = model["f_label.3.weight"]
+                model["label_proj.bias"] = model["f_label.3.bias"]
+                del model["f_label.3.weight"]
+                del model["f_label.3.bias"]
+
             res.load_state_dict(model)
         else:
             state = {k: v for k,v in res.state_dict().items() if k not in model}
@@ -846,6 +865,7 @@ class NKChartParser(nn.Module):
         golds=None,
         return_label_scores_charts=False,
         return_span_representations=False,
+        index_and_span_info = None,
     ):
         # If return span representations, don't train
         #is_train = golds is not None and not return_span_representations
@@ -1097,15 +1117,92 @@ class NKChartParser(nn.Module):
                     torch.unsqueeze(fp_end, 0)
                     - torch.unsqueeze(fp_start, 1)
                 )
-                span_features = self.f_label(span_features)
-                # Do not include appended 0's, as done in label_scores_from_annotations,
-                # since we do not care about null spans
+                span_features = self.f_rep(span_features)
                 span_representations.append(span_features)
             return span_representations
 
+        if index_and_span_info is not None:
+            # span_info: (str(label), sentence, left, right)
+            t, span_info = index_and_span_info
+            # Use nearest neighbour lookups for populating chart.
+            batch_trees, batch_scores = [], []
+            for i, (start, end) in enumerate(zip(fp_startpoints, fp_endpoints)):
+                sentence = sentences[i]
+                if self.f_tag is not None:
+                    sentence = list(zip(per_sentence_tags[i], [x[1] for x in sentence]))
+
+                fp_start = fencepost_annotations_start[start:end]
+                fp_end = fencepost_annotations_end[start:end]
+
+                span_features = (
+                    torch.unsqueeze(fp_end, 0)
+                    - torch.unsqueeze(fp_start, 1)
+                )
+                span_features = self.f_rep(span_features)
+                # loop over chart
+                T = len(sentence)
+                # unnecessary?
+                chart = np.zeros((T+1, T+1), dtype=np.int32)
+                scores = np.zeros((T+1, T+1, len(self.label_vocab.values)), dtype=np.float32)
+                p_i, p_j, p_label = [], [], []
+                for length in range(1, T+1):
+                    for left in range(0, T+1-length):
+                        right = left + length
+                        rep = span_features[left, right]
+                        idxs, dists = t.get_nns_by_vector(rep, 8, include_distances=True)
+                        #labels = [span_info[x][0] for x in idxs]
+                        labels = [
+                            self.label_vocab.index(span_info[x][0])
+                            for x in idxs
+                        ]
+                        # majority later, but nearest for now
+                        label = labels[0]
+                        score = dists[0]
+                        if label != 0:
+                            chart[left,right] = label
+                            scores[left,right,label] = score
+                            p_i.append(left)
+                            p_j.append(right)
+                            p_label.append(label)
+                decoder_args = dict(
+                    sentence_len=T,
+                    label_scores_chart=scores,
+                    gold=None,
+                    label_vocab=self.label_vocab,
+                    is_train=False,
+                )
+                score, p_i, p_j, p_label, _ = chart_helper.decode(False, **decoder_args)
+                #import pdb; pdb.set_trace()
+
+                idx = -1
+                def make_tree():
+                    nonlocal idx
+                    idx += 1
+                    i, j, label_idx = p_i[idx], p_j[idx], p_label[idx]
+                    label = self.label_vocab.value(label_idx)
+                    if (i + 1) >= j:
+                        tag, word = sentence[i]
+                        tree = trees.LeafParseNode(int(i), tag, word)
+                        if label:
+                            tree = trees.InternalParseNode(label, [tree])
+                        return [tree]
+                    else:
+                        left_trees = make_tree()
+                        right_trees = make_tree()
+                        children = left_trees + right_trees
+                        if label:
+                            return [trees.InternalParseNode(label, children)]
+                        else:
+                            return children
+
+                tree = make_tree()[0]
+                batch_trees.append(tree)
+                batch_scores.append(score)
+            return batch_trees, batch_scores
+
         if not is_train:
-            trees = []
-            scores = []
+            p_trees = []
+            p_scores = []
             if self.f_tag is not None:
                 # Note that tag_logits includes tag predictions for start/stop tokens
                 tag_idxs = torch.argmax(tag_logits, -1).cpu()
@@ -1117,9 +1214,9 @@ class NKChartParser(nn.Module):
                 if self.f_tag is not None:
                     sentence = list(zip(per_sentence_tags[i], [x[1] for x in sentence]))
                 tree, score = self.parse_from_annotations(fencepost_annotations_start[start:end,:], fencepost_annotations_end[start:end,:], sentence, golds[i])
-                trees.append(tree)
-                scores.append(score)
-            return trees, scores
+                p_trees.append(tree)
+                p_scores.append(score)
+            return p_trees, p_scores
 
         # During training time, the forward pass needs to be computed for every
         # cell of the chart, but the backward pass only needs to be computed for
@@ -1153,9 +1250,9 @@ class NKChartParser(nn.Module):
         cells_j = from_numpy(np.concatenate(pjs + gjs))
         cells_label = from_numpy(np.concatenate(plabels + glabels))
 
-        cells_label_scores = self.f_label(
+        cells_label_scores = self.label_proj(self.f_rep(
             fencepost_annotations_end[cells_j] - fencepost_annotations_start[cells_i]
-        )
+        ))
         cells_label_scores = torch.cat([
             cells_label_scores.new_zeros((cells_label_scores.size(0), 1)),
             cells_label_scores
@@ -1179,7 +1276,7 @@ class NKChartParser(nn.Module):
             torch.unsqueeze(fencepost_annotations_end, 0)
             - torch.unsqueeze(fencepost_annotations_start, 1)
         )
-        label_scores_chart = self.f_label(span_features)
+        label_scores_chart = self.label_proj(self.f_rep(span_features))
         label_scores_chart = torch.cat([
             label_scores_chart.new_zeros(
                 (label_scores_chart.size(0), label_scores_chart.size(1), 1),
