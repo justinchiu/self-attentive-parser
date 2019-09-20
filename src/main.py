@@ -2,8 +2,10 @@ import argparse
 import itertools
 import os.path
 import time
+import pickle
 
 import torch
+import torch.nn as nn
 import torch.optim.lr_scheduler
 
 import numpy as np
@@ -83,7 +85,14 @@ def make_hparams():
         bert_model="bert-base-uncased",
         bert_do_lower_case=True,
         bert_transliterate="",
-        )
+
+        # Number of neighbours for nonparametric search
+        num_neighbours = 16,
+        # Integration strategy of retrieved labels
+        # - soft mixes in representation space
+        # - hard mixes in score space
+        integration = "soft", # ["soft", "hard"]
+    )
 
 def run_train(args, hparams):
     if args.numpy_seed is not None:
@@ -374,7 +383,7 @@ def run_test(args):
 
     test_predicted = []
     for start_index in range(0, len(test_treebank), args.eval_batch_size):
-        subbatch_trees = test_treebank[start_index:start_index+args.eval_batch_size]
+        subbatch_trees = test_treebank[start_index:start_index+args.eval_batch_size].cpu()
         subbatch_sentences = [[(leaf.tag, leaf.word) for leaf in tree.leaves()] for tree in subbatch_trees]
         predicted, _ = parser.parse_batch(subbatch_sentences)
         del _
@@ -555,6 +564,71 @@ def run_viz(args):
                 viz_attention(sentence_words, attns)
 
 
+def run_index(args):
+    print("Saving span representations")
+    print()
+
+    print("Loading train trees from {}...".format(args.train_path))
+    train_treebank = trees.load_trees(args.train_path)
+    print("Loaded {:,} train examples.".format(len(train_treebank)))
+
+    print("Loading model from {}...".format(args.model_path_base))
+    assert args.model_path_base.endswith(".pt"), "Only pytorch savefiles supported"
+
+    info = torch_load(args.model_path_base)
+    assert 'hparams' in info['spec'], "Older savefiles not supported"
+    parser = parse_nk.NKChartParser.from_spec(info['spec'], info['state_dict'])
+
+    # Remove projection in f_label into label score space,
+    # leaving just the label representation.
+    parser.f_label = nn.Sequential(*parser.f_label[:-1])
+
+    print("Getting labelled span representations")
+    print(f"Saving index to {args.index_path}")
+    start_time = time.time()
+
+    from annoy import AnnoyIndex
+    t = AnnoyIndex(250, "dot")
+    i = 0
+    span_info = []
+
+    #span_reps = []
+    for start_index in range(0, len(train_treebank), args.batch_size):
+        subbatch_trees = train_treebank[start_index:start_index+args.batch_size]
+        subbatch_sentences = [
+            [(leaf.tag, leaf.word) for leaf in tree.leaves()]
+            for tree in subbatch_trees
+        ]
+        span_representations = parser.parse_batch(
+            subbatch_sentences,
+            return_span_representations = True,
+        )
+        for sub_index, (tree, chart) in enumerate(zip(subbatch_trees, span_representations)):
+            train_index = start_index + sub_index
+            chart = chart.cpu()
+            # tree.leaves(): T
+            # chart: T+1 x T+1 x H (fencepost reps)
+            T = len(list(tree.leaves()))
+            parse = tree.convert()
+            for length in range(1, T+1):
+                for left in range(0, T + 1 - length):
+                    right = left + length
+                    label = parse.oracle_label(left, right)
+                    label_idx = parser.label_vocab.index(label)
+                    span_rep = chart[left, right]
+                    t.add_item(i, span_rep)
+                    i += 1
+                    span_info.append((label, train_index, left, right))
+        #span_reps.extend([x.cpu() for x in span_representations])
+    # build and save index
+    t.build(16)
+    t.save("all_spans.ann")
+
+    # save info for index: [(label, train_index, left, right)]
+    pickle.dump(span_info, open("all_spans.info", "wb"))
+
+
+
 def main():
     parser = argparse.ArgumentParser()
     subparsers = parser.add_subparsers()
@@ -603,6 +677,15 @@ def main():
     subparser.add_argument("--evalb-dir", default="EVALB/")
     subparser.add_argument("--viz-path", default="data/22.auto.clean")
     subparser.add_argument("--eval-batch-size", type=int, default=100)
+
+    subparser = subparsers.add_parser("index")
+    subparser.set_defaults(callback=run_index)
+    subparser.add_argument("--model-path-base", required=True)
+    subparser.add_argument("--train-path", default="data/02-21.10way.clean")
+    subparser.add_argument("--train-path-raw", type=str)
+    subparser.add_argument("--batch-size", type=int, default=256)
+    subparser.add_argument("--subbatch-max-tokens", type=int, default=2000)
+    subparser.add_argument("--index-path", default="index/en_bert")
 
     args = parser.parse_args()
     args.callback(args)

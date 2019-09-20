@@ -840,7 +840,15 @@ class NKChartParser(nn.Module):
         tree_list, loss_list = self.parse_batch([sentence], [gold] if gold is not None else None)
         return tree_list[0], loss_list[0]
 
-    def parse_batch(self, sentences, golds=None, return_label_scores_charts=False):
+    def parse_batch(
+        self,
+        sentences,
+        golds=None,
+        return_label_scores_charts=False,
+        return_span_representations=False,
+    ):
+        # If return span representations, don't train
+        #is_train = golds is not None and not return_span_representations
         is_train = golds is not None
         self.train(is_train)
         torch.set_grad_enabled(is_train)
@@ -1074,6 +1082,27 @@ class NKChartParser(nn.Module):
                 charts.append(chart.cpu().data.numpy())
             return charts
 
+        # Return the span representations for storing index
+        if return_span_representations:
+            span_representations = []
+            for i, (start, end) in enumerate(zip(fp_startpoints, fp_endpoints)):
+                sentence = sentences[i]
+                if self.f_tag is not None:
+                    sentence = list(zip(per_sentence_tags[i], [x[1] for x in sentence]))
+
+                fp_start = fencepost_annotations_start[start:end]
+                fp_end = fencepost_annotations_end[start:end]
+
+                span_features = (
+                    torch.unsqueeze(fp_end, 0)
+                    - torch.unsqueeze(fp_start, 1)
+                )
+                span_features = self.f_label(span_features)
+                # Do not include appended 0's, as done in label_scores_from_annotations,
+                # since we do not care about null spans
+                span_representations.append(span_features)
+            return span_representations
+
         if not is_train:
             trees = []
             scores = []
@@ -1124,11 +1153,13 @@ class NKChartParser(nn.Module):
         cells_j = from_numpy(np.concatenate(pjs + gjs))
         cells_label = from_numpy(np.concatenate(plabels + glabels))
 
-        cells_label_scores = self.f_label(fencepost_annotations_end[cells_j] - fencepost_annotations_start[cells_i])
+        cells_label_scores = self.f_label(
+            fencepost_annotations_end[cells_j] - fencepost_annotations_start[cells_i]
+        )
         cells_label_scores = torch.cat([
-                    cells_label_scores.new_zeros((cells_label_scores.size(0), 1)),
-                    cells_label_scores
-                    ], 1)
+            cells_label_scores.new_zeros((cells_label_scores.size(0), 1)),
+            cells_label_scores
+        ], 1)
         cells_scores = torch.gather(cells_label_scores, 1, cells_label[:, None])
         loss = cells_scores[:num_p].sum() - cells_scores[num_p:].sum() + paugment_total
 
@@ -1137,22 +1168,38 @@ class NKChartParser(nn.Module):
         else:
             return None, loss
 
-    def label_scores_from_annotations(self, fencepost_annotations_start, fencepost_annotations_end):
+    def label_scores_from_annotations(
+        self,
+        fencepost_annotations_start,
+        fencepost_annotations_end,
+    ):
         # Note that the bias added to the final layer norm is useless because
         # this subtraction gets rid of it
-        span_features = (torch.unsqueeze(fencepost_annotations_end, 0)
-                         - torch.unsqueeze(fencepost_annotations_start, 1))
-
+        span_features = (
+            torch.unsqueeze(fencepost_annotations_end, 0)
+            - torch.unsqueeze(fencepost_annotations_start, 1)
+        )
         label_scores_chart = self.f_label(span_features)
         label_scores_chart = torch.cat([
-            label_scores_chart.new_zeros((label_scores_chart.size(0), label_scores_chart.size(1), 1)),
-            label_scores_chart
-            ], 2)
+            label_scores_chart.new_zeros(
+                (label_scores_chart.size(0), label_scores_chart.size(1), 1),
+            ),
+            label_scores_chart,
+        ], 2)
         return label_scores_chart
 
-    def parse_from_annotations(self, fencepost_annotations_start, fencepost_annotations_end, sentence, gold=None):
+    def parse_from_annotations(
+        self,
+        fencepost_annotations_start,
+        fencepost_annotations_end,
+        sentence,
+        gold=None,
+    ):
         is_train = gold is not None
-        label_scores_chart = self.label_scores_from_annotations(fencepost_annotations_start, fencepost_annotations_end)
+        label_scores_chart = self.label_scores_from_annotations(
+            fencepost_annotations_start,
+            fencepost_annotations_end,
+        )
         label_scores_chart_np = label_scores_chart.cpu().data.numpy()
 
         if is_train:

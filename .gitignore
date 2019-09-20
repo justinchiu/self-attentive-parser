@@ -45,3 +45,8 @@ var/
 *.egg-info/
 .installed.cfg
 *.egg
+
+# Nearest neighbour files
+*.ann
+*.info
+
