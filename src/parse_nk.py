@@ -1164,6 +1164,7 @@ class NKChartParser(nn.Module):
                             p_i.append(left)
                             p_j.append(right)
                             p_label.append(label)
+                            print(score)
                 decoder_args = dict(
                     sentence_len=T,
                     label_scores_chart=scores,
@@ -1172,7 +1173,6 @@ class NKChartParser(nn.Module):
                     is_train=False,
                 )
                 score, p_i, p_j, p_label, _ = chart_helper.decode(False, **decoder_args)
-                #import pdb; pdb.set_trace()
 
                 idx = -1
                 def make_tree():

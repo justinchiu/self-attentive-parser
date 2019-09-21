@@ -597,20 +597,26 @@ def run_index(args):
     assert 'hparams' in info['spec'], "Older savefiles not supported"
     parser = parse_nk.NKChartParser.from_spec(info['spec'], info['state_dict'])
 
-    # Remove projection in f_label into label score space,
-    # leaving just the label representation.
-    parser.f_label = nn.Sequential(*parser.f_label[:-1])
-
     print("Getting labelled span representations")
     print(f"Saving index to {args.index_path}")
     start_time = time.time()
 
+    # Per label index
+    use_label_index = args.label_index
     from annoy import AnnoyIndex
-    t = AnnoyIndex(250, "dot")
-    i = 0
-    span_info = []
+    if use_label_index:
+        ts = [
+            AnnoyIndex(250, "dot")
+            for x in range(len(parser.label_vocab.values))
+        ]
+        span_infos = [
+            []
+            for x in range(len(parser.label_vocab.values))
+        ]
+    else:
+        t = AnnoyIndex(250, "dot")
+        span_info = []
 
-    #span_reps = []
     for start_index in range(0, len(train_treebank), args.batch_size):
         subbatch_trees = train_treebank[start_index:start_index+args.batch_size]
         subbatch_sentences = [
@@ -623,7 +629,7 @@ def run_index(args):
         )
         for sub_index, (tree, chart) in enumerate(zip(subbatch_trees, span_representations)):
             train_index = start_index + sub_index
-            chart = chart.cpu()
+            chart = chart.cpu().numpy()
             # tree.leaves(): T
             # chart: T+1 x T+1 x H (fencepost reps)
             T = len(list(tree.leaves()))
@@ -634,16 +640,23 @@ def run_index(args):
                     label = parse.oracle_label(left, right)
                     label_idx = parser.label_vocab.index(label)
                     span_rep = chart[left, right]
-                    t.add_item(i, span_rep)
-                    i += 1
-                    span_info.append((label, train_index, left, right))
-        #span_reps.extend([x.cpu() for x in span_representations])
+                    if use_label_index:
+                        ts[label_idx].add_item(len(span_infos[label_idx]), span_rep)
+                        span_infos[label_idx].append((label, train_index, left, right))
+                    else:
+                        t.add_item(len(span_info), span_rep)
+                        span_info.append((label, train_index, left, right))
     # build and save index
-    t.build(16)
-    t.save(f"{args.nn_prefix}.ann")
-
-    # save info for index: [(label, train_index, left, right)]
-    pickle.dump(span_info, open(f"{args.nn_prefix}.info", "wb"))
+    if use_label_index:
+        for i, (t, span_info) in enumerate(zip(ts, span_infos)):
+            t.build(16)
+            t.save(f"{args.nn_prefix}.{i}.ann")
+            pickle.dump(span_info, open(f"{args.nn_prefix}.{i}.info", "wb"))
+    else:
+        t.build(16)
+        t.save(f"{args.nn_prefix}.ann")
+        # save info for index: [(label, train_index, left, right)]
+        pickle.dump(span_info, open(f"{args.nn_prefix}.info", "wb"))
 
 
 
@@ -706,6 +719,7 @@ def main():
     subparser.add_argument("--subbatch-max-tokens", type=int, default=2000)
     subparser.add_argument("--index-path", default="index/en_bert")
     subparser.add_argument("--nn-prefix", default="all_spans", required=True)
+    subparser.add_argument("--label-index", action="store_true")
 
     args = parser.parse_args()
     args.callback(args)
