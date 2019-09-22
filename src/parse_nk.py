@@ -865,7 +865,7 @@ class NKChartParser(nn.Module):
         golds=None,
         return_label_scores_charts=False,
         return_span_representations=False,
-        index_and_span_info = None,
+        span_index = None,
     ):
         # If return span representations, don't train
         #is_train = golds is not None and not return_span_representations
@@ -1121,9 +1121,7 @@ class NKChartParser(nn.Module):
                 span_representations.append(span_features)
             return span_representations
 
-        if index_and_span_info is not None:
-            # span_info: (str(label), sentence, left, right)
-            t, span_info = index_and_span_info
+        if span_index is not None:
             # Use nearest neighbour lookups for populating chart.
             batch_trees, batch_scores = [], []
             for i, (start, end) in enumerate(zip(fp_startpoints, fp_endpoints)):
@@ -1149,6 +1147,8 @@ class NKChartParser(nn.Module):
                     for left in range(0, T+1-length):
                         right = left + length
                         rep = span_features[left, right]
+                        labels, distances = span_index.annoy_topk(rep, 8)
+                        import pdb; pdb.set_trace()
                         idxs, dists = t.get_nns_by_vector(rep, 8, include_distances=True)
                         #labels = [span_info[x][0] for x in idxs]
                         labels = [

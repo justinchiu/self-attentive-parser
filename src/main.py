@@ -4,6 +4,8 @@ import os.path
 import time
 import pickle
 
+from pathlib import Path
+
 import torch
 import torch.nn as nn
 import torch.optim.lr_scheduler
@@ -11,10 +13,11 @@ import torch.optim.lr_scheduler
 import numpy as np
 
 import evaluate
-import trees
-import vocabulary
+import index
 import nkutil
 import parse_nk
+import vocabulary
+import trees
 tokens = parse_nk
 
 def torch_load(load_path):
@@ -230,7 +233,7 @@ def run_train(args, hparams):
     assert hparams.step_decay, "Only step_decay schedule is supported"
 
     warmup_coeff = hparams.learning_rate / hparams.learning_rate_warmup_steps
-    scheduler = torch.optim.lr_scheduler.ReduceLROnPlateau(
+    scheduler = torcu.optim.lr_scheduler.ReduceLROnPlateau(
         trainer, 'max',
         factor=hparams.step_decay_factor,
         patience=hparams.step_decay_patience,
@@ -381,12 +384,11 @@ def run_test(args):
     print("Parsing test sentences...")
     start_time = time.time()
 
-    if args.nn_prefix is not None:
-        from annoy import AnnoyIndex
-        t = AnnoyIndex(250, "dot")
-        t.load(f"{args.nn_prefix}.ann")
-        span_info = pickle.load(open(f"{args.nn_prefix}.info", "rb"))
-    index_and_span_info = (t, span_info) if args.nn_prefix is not None else None
+    if args.use_neighbours:
+        span_index = index.SpanIndex(
+            num_indices = len(parser.label_vocab.values)
+                if args.label_index else 1,
+        )
 
     test_predicted = []
     for start_index in range(0, len(test_treebank), args.eval_batch_size):
@@ -397,7 +399,7 @@ def run_test(args):
         ]
         predicted, _ = parser.parse_batch(
             subbatch_sentences,
-            index_and_span_info = index_and_span_info,
+            span_index = span_index,
         )
         del _
         test_predicted.extend([p.convert() for p in predicted])
@@ -598,24 +600,13 @@ def run_index(args):
     parser = parse_nk.NKChartParser.from_spec(info['spec'], info['state_dict'])
 
     print("Getting labelled span representations")
-    print(f"Saving index to {args.index_path}")
     start_time = time.time()
 
     # Per label index
     use_label_index = args.label_index
-    from annoy import AnnoyIndex
-    if use_label_index:
-        ts = [
-            AnnoyIndex(250, "dot")
-            for x in range(len(parser.label_vocab.values))
-        ]
-        span_infos = [
-            []
-            for x in range(len(parser.label_vocab.values))
-        ]
-    else:
-        t = AnnoyIndex(250, "dot")
-        span_info = []
+    num_labels = len(parser.label_vocab.values) if use_label_index else 1
+
+    span_index = index.SpanIndex(num_indices = num_labels)
 
     for start_index in range(0, len(train_treebank), args.batch_size):
         subbatch_trees = train_treebank[start_index:start_index+args.batch_size]
@@ -631,33 +622,38 @@ def run_index(args):
             train_index = start_index + sub_index
             chart = chart.cpu().numpy()
             # tree.leaves(): T
-            # chart: T+1 x T+1 x H (fencepost reps)
+            # chart: T+1 x T+1 x H (span reps)
             T = len(list(tree.leaves()))
             parse = tree.convert()
             for length in range(1, T+1):
-                for left in range(0, T + 1 - length):
+                for left in range(0, T+1-length):
                     right = left + length
                     label = parse.oracle_label(left, right)
                     label_idx = parser.label_vocab.index(label)
                     span_rep = chart[left, right]
-                    if use_label_index:
-                        ts[label_idx].add_item(len(span_infos[label_idx]), span_rep)
-                        span_infos[label_idx].append((label, train_index, left, right))
-                    else:
-                        t.add_item(len(span_info), span_rep)
-                        span_info.append((label, train_index, left, right))
-    # build and save index
-    if use_label_index:
-        for i, (t, span_info) in enumerate(zip(ts, span_infos)):
-            t.build(16)
-            t.save(f"{args.nn_prefix}.{i}.ann")
-            pickle.dump(span_info, open(f"{args.nn_prefix}.{i}.info", "wb"))
-    else:
-        t.build(16)
-        t.save(f"{args.nn_prefix}.ann")
-        # save info for index: [(label, train_index, left, right)]
-        pickle.dump(span_info, open(f"{args.nn_prefix}.info", "wb"))
+                    span_info = index.SpanInfo(
+                        label_idx = label_idx,
+                        label = label,
+                        sen_idx = train_index,
+                        left = left,
+                        right = right,
+                    )
+                    span_index.add_item(
+                        key = span_rep,
+                        value = span_info,
+                        index = label_idx if use_label_index else 0,
+                    )
+    # build and save indices
+    span_index.build()
+    print(f"Saving index to {args.index_path}")
+    prefix = index.get_index_prefix(
+        index_base_path = args.index_path,
+        full_model_path = args.model_path_base,
+        nn_prefix = args.nn_prefix,
+    )
+    span_index.save(prefix)
 
+    print(f"index-elapsed {format_elapsed(start_time)}")
 
 
 def main():
@@ -687,7 +683,10 @@ def main():
     subparser.add_argument("--test-path", default="data/23.auto.clean")
     subparser.add_argument("--test-path-raw", type=str)
     subparser.add_argument("--eval-batch-size", type=int, default=100)
-    subparser.add_argument("--nn-prefix", default=None)
+    subparser.add_argument("--use-neighbours", action="store_true")
+    subparser.add_argument("--index-path", default="index")
+    subparser.add_argument("--nn-prefix", default="all_spans", required=True)
+    subparser.add_argument("--label-index", action="store_true")
 
     subparser = subparsers.add_parser("ensemble")
     subparser.set_defaults(callback=run_ensemble)
@@ -717,7 +716,7 @@ def main():
     subparser.add_argument("--train-path-raw", type=str)
     subparser.add_argument("--batch-size", type=int, default=256)
     subparser.add_argument("--subbatch-max-tokens", type=int, default=2000)
-    subparser.add_argument("--index-path", default="index/en_bert")
+    subparser.add_argument("--index-path", default="index")
     subparser.add_argument("--nn-prefix", default="all_spans", required=True)
     subparser.add_argument("--label-index", action="store_true")
 
