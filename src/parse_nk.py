@@ -1139,40 +1139,36 @@ class NKChartParser(nn.Module):
                 span_features = self.f_rep(span_features)
                 # loop over chart
                 T = len(sentence)
-                # unnecessary?
-                chart = np.zeros((T+1, T+1), dtype=np.int32)
-                scores = np.zeros((T+1, T+1, len(self.label_vocab.values)), dtype=np.float32)
-                p_i, p_j, p_label = [], [], []
+                label_scores_chart = np.zeros(
+                    (T+1, T+1, len(self.label_vocab.values)),
+                    dtype = np.float32,
+                )
                 for length in range(1, T+1):
                     for left in range(0, T+1-length):
                         right = left + length
                         rep = span_features[left, right]
+                        # num_indices x k
                         labels, distances = span_index.annoy_topk(rep, 8)
-                        import pdb; pdb.set_trace()
-                        idxs, dists = t.get_nns_by_vector(rep, 8, include_distances=True)
-                        #labels = [span_info[x][0] for x in idxs]
-                        labels = [
-                            self.label_vocab.index(span_info[x][0])
-                            for x in idxs
-                        ]
-                        # majority later, but nearest for now
-                        label = labels[0]
-                        score = dists[0]
-                        if label != 0:
-                            chart[left,right] = label
-                            scores[left,right,label] = score
-                            p_i.append(left)
-                            p_j.append(right)
-                            p_label.append(label)
-                            print(score)
+                        # use all of top k
+                        np.add.at(label_scores_chart[left,right], labels, distances)
+                        # only use nearest neighbour
+                        #label = labels[0,0]
+                        #score = distances[0,0]
+                        #label_scores_chart[left,right,label] = score
+                        #if label != 0:
+                            #label_scores_chart[left,right,label] = score
+                            #print(score)
                 decoder_args = dict(
                     sentence_len=T,
-                    label_scores_chart=scores,
+                    label_scores_chart=label_scores_chart,
                     gold=None,
                     label_vocab=self.label_vocab,
                     is_train=False,
                 )
-                score, p_i, p_j, p_label, _ = chart_helper.decode(False, **decoder_args)
+                score, p_i, p_j, p_label, _ = chart_helper.decode(
+                    False,
+                    **decoder_args,
+                )
 
                 idx = -1
                 def make_tree():

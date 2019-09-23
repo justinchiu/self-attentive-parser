@@ -1,4 +1,7 @@
 
+import pickle
+
+import numpy as np
 
 from pathlib import Path
 from typing import NamedTuple
@@ -7,9 +10,6 @@ from annoy import AnnoyIndex
 
 
 def get_index_prefix(index_base_path, full_model_path, nn_prefix):
-    nn_suffix = ".ann"
-    info_suffix = ".info"
-
     # models/bert*.pt
     index_base_path = Path(index_base_path)
     full_model_path = Path(full_model_path)
@@ -17,20 +17,23 @@ def get_index_prefix(index_base_path, full_model_path, nn_prefix):
     return fname
 
 def get_index_paths(prefix, num_indices):
-    if num_indices > 0:
+    nn_suffix = ".ann"
+    info_suffix = ".info"
+
+    if num_indices > 1:
         return (
-            [fname.with_suffix(f".{i}{nn_suffix}") for i in range(num_indices)],
-            [fname.with_suffix(f".{i}{info_suffix}") for i in range(num_indices)],
+            [prefix.with_suffix(f".{i}{nn_suffix}") for i in range(num_indices)],
+            [prefix.with_suffix(f".{i}{info_suffix}") for i in range(num_indices)],
         )
     else:
-        return [fname.with_suffix(nn_suffix)], [fname.with_suffix(info_suffix)]
+        return [prefix.with_suffix(nn_suffix)], [prefix.with_suffix(info_suffix)]
 
 
 # Constructor for annoy indices
 def init_annoy(dim, metric, num_indices):
     return (
         # index
-        [AnnoyIndex(dim, metric) for _ in range(num_indices)],
+        [AnnoyIndex(dim, metric=metric) for _ in range(num_indices)],
         # span info
         [[] for _ in range(num_indices)],
     )
@@ -80,15 +83,20 @@ class SpanIndex:
 
     def annoy_topk(self, key, k, label_only=True):
         # only labels for now
-        idx_and_distance = [
+        idx_and_distances = [
             index.get_nns_by_vector(key, k, include_distances=True)
             for index in self.raw_indices
         ]
         labels = np.array([
-            self.raw_span_infos[idx].label_idx
-            for idx, dist in idx_and_distance
+            [
+                self.raw_span_infos[index][idx].label_idx
+                for idx, dist in zip(*idx_and_distance)
+            ] for index, idx_and_distance in enumerate(idx_and_distances)
         ])
-        distances = np.array([dist for idx, dist in idx_and_distance])
+        distances = np.array([
+            [dist for idx, dist in zip(*idx_and_distance)]
+            for idx_and_distance in idx_and_distances
+        ])
         # only return label
         return labels, distances
 
@@ -104,8 +112,8 @@ class SpanIndex:
         for i, (t, ann_name, info_name) in enumerate(zip(
             self.raw_indices, ann_names, info_names,
         )):
-            t.load(ann_name)
-            self.raw_span_infos[i] = pickle.load(open(info_name, "rb"))
+            t.load(str(ann_name))
+            self.raw_span_infos[i] = pickle.load(open(str(info_name), "rb"))
 
     def save(self, prefix=None):
         assert self.prefix or prefix, "One of self.prefix or prefix must not be None"
@@ -116,6 +124,5 @@ class SpanIndex:
             self.raw_indices, self.raw_span_infos, ann_names, info_names,
         ):
             ann_name.parent.mkdir(parents=True, exist_ok=True)
-            t.build(16)
             t.save(str(ann_name))
             pickle.dump(span_info, open(info_name, "wb"))

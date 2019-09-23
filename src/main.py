@@ -389,6 +389,12 @@ def run_test(args):
             num_indices = len(parser.label_vocab.values)
                 if args.label_index else 1,
         )
+        prefix = index.get_index_prefix(
+            index_base_path = args.index_path,
+            full_model_path = args.model_path_base,
+            nn_prefix = args.nn_prefix,
+        )
+        span_index.load(prefix)
 
     test_predicted = []
     for start_index in range(0, len(test_treebank), args.eval_batch_size):
@@ -399,7 +405,7 @@ def run_test(args):
         ]
         predicted, _ = parser.parse_batch(
             subbatch_sentences,
-            span_index = span_index,
+            span_index = span_index if args.use_neighbours else None,
         )
         del _
         test_predicted.extend([p.convert() for p in predicted])
@@ -643,15 +649,15 @@ def run_index(args):
                         value = span_info,
                         index = label_idx if use_label_index else 0,
                     )
-    # build and save indices
     span_index.build()
-    print(f"Saving index to {args.index_path}")
     prefix = index.get_index_prefix(
         index_base_path = args.index_path,
         full_model_path = args.model_path_base,
         nn_prefix = args.nn_prefix,
     )
+    print(f"Saving index to {prefix}")
     span_index.save(prefix)
+    span_index.raw_indices[0].get_nns_by_item(0, 10)
 
     print(f"index-elapsed {format_elapsed(start_time)}")
 
