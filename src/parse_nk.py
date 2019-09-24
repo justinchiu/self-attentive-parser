@@ -866,6 +866,7 @@ class NKChartParser(nn.Module):
         return_label_scores_charts=False,
         return_span_representations=False,
         span_index = None,
+        k = None,
     ):
         # If return span representations, don't train
         #is_train = golds is not None and not return_span_representations
@@ -1148,16 +1149,14 @@ class NKChartParser(nn.Module):
                         right = left + length
                         rep = span_features[left, right]
                         # num_indices x k
-                        labels, distances = span_index.annoy_topk(rep, 8)
+                        labels, distances = span_index.annoy_topk(rep, k)
                         # use all of top k
-                        np.add.at(label_scores_chart[left,right], labels, distances)
-                        # only use nearest neighbour
-                        #label = labels[0,0]
-                        #score = distances[0,0]
-                        #label_scores_chart[left,right,label] = score
-                        #if label != 0:
-                            #label_scores_chart[left,right,label] = score
-                            #print(score)
+                        np.add.at(
+                            label_scores_chart[left,right],
+                            np.concatenate(labels),
+                            np.concatenate(distances),
+                        )
+                label_scores_chart[:,:,0] = 0
                 decoder_args = dict(
                     sentence_len=T,
                     label_scores_chart=label_scores_chart,

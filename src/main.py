@@ -406,6 +406,7 @@ def run_test(args):
         predicted, _ = parser.parse_batch(
             subbatch_sentences,
             span_index = span_index if args.use_neighbours else None,
+            k = args.k,
         )
         del _
         test_predicted.extend([p.convert() for p in predicted])
@@ -636,19 +637,20 @@ def run_index(args):
                     right = left + length
                     label = parse.oracle_label(left, right)
                     label_idx = parser.label_vocab.index(label)
-                    span_rep = chart[left, right]
-                    span_info = index.SpanInfo(
-                        label_idx = label_idx,
-                        label = label,
-                        sen_idx = train_index,
-                        left = left,
-                        right = right,
-                    )
-                    span_index.add_item(
-                        key = span_rep,
-                        value = span_info,
-                        index = label_idx if use_label_index else 0,
-                    )
+                    if label_idx != 0 or not args.ignore_empty:
+                        span_rep = chart[left, right]
+                        span_info = index.SpanInfo(
+                            label_idx = label_idx,
+                            label = label,
+                            sen_idx = train_index,
+                            left = left,
+                            right = right,
+                        )
+                        span_index.add_item(
+                            key = span_rep,
+                            value = span_info,
+                            index = label_idx if use_label_index else 0,
+                        )
     span_index.build()
     prefix = index.get_index_prefix(
         index_base_path = args.index_path,
@@ -693,6 +695,7 @@ def main():
     subparser.add_argument("--index-path", default="index")
     subparser.add_argument("--nn-prefix", default="all_spans", required=True)
     subparser.add_argument("--label-index", action="store_true")
+    subparser.add_argument("--k", type=int, default=8)
 
     subparser = subparsers.add_parser("ensemble")
     subparser.set_defaults(callback=run_ensemble)
@@ -725,6 +728,7 @@ def main():
     subparser.add_argument("--index-path", default="index")
     subparser.add_argument("--nn-prefix", default="all_spans", required=True)
     subparser.add_argument("--label-index", action="store_true")
+    subparser.add_argument("--ignore-empty", action="store_true")
 
     args = parser.parse_args()
     args.callback(args)

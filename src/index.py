@@ -9,12 +9,18 @@ from typing import NamedTuple
 from annoy import AnnoyIndex
 
 
+def update_chart(chart, labels, distances):
+    np.add.at(chart, labels, distances)
+    chart[:,:,0] = 0
+
+
 def get_index_prefix(index_base_path, full_model_path, nn_prefix):
     # models/bert*.pt
     index_base_path = Path(index_base_path)
     full_model_path = Path(full_model_path)
     fname = index_base_path / full_model_path.stem / nn_prefix
     return fname
+
 
 def get_index_paths(prefix, num_indices):
     nn_suffix = ".ann"
