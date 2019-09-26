@@ -89,8 +89,8 @@ def make_hparams():
         bert_do_lower_case=True,
         bert_transliterate="",
 
-        # Number of neighbours for nonparametric search
-        num_neighbours = 16,
+        zero_empty=True,
+
         # Integration strategy of retrieved labels
         # - soft mixes in representation space
         # - hard mixes in score space
@@ -233,7 +233,7 @@ def run_train(args, hparams):
     assert hparams.step_decay, "Only step_decay schedule is supported"
 
     warmup_coeff = hparams.learning_rate / hparams.learning_rate_warmup_steps
-    scheduler = torcu.optim.lr_scheduler.ReduceLROnPlateau(
+    scheduler = torch.optim.lr_scheduler.ReduceLROnPlateau(
         trainer, 'max',
         factor=hparams.step_decay_factor,
         patience=hparams.step_decay_patience,
@@ -407,6 +407,7 @@ def run_test(args):
             subbatch_sentences,
             span_index = span_index if args.use_neighbours else None,
             k = args.k,
+            zero_empty = args.zero_empty,
         )
         del _
         test_predicted.extend([p.convert() for p in predicted])
@@ -683,6 +684,7 @@ def main():
     subparser.add_argument("--epochs", type=int)
     subparser.add_argument("--checks-per-epoch", type=int, default=4)
     subparser.add_argument("--print-vocabs", action="store_true")
+    subparser.add_argument("--zero-empty", action="store_true")
 
     subparser = subparsers.add_parser("test")
     subparser.set_defaults(callback=run_test)
@@ -696,6 +698,7 @@ def main():
     subparser.add_argument("--nn-prefix", default="all_spans", required=True)
     subparser.add_argument("--label-index", action="store_true")
     subparser.add_argument("--k", type=int, default=8)
+    subparser.add_argument("--zero-empty", action="store_true")
 
     subparser = subparsers.add_parser("ensemble")
     subparser.set_defaults(callback=run_ensemble)

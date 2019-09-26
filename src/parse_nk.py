@@ -297,7 +297,7 @@ class MultiHeadAttention(nn.Module):
         q_padded = q_s.new_zeros((n_head, mb_size, len_padded, d_k))
         k_padded = k_s.new_zeros((n_head, mb_size, len_padded, d_k))
         v_padded = v_s.new_zeros((n_head, mb_size, len_padded, d_v))
-        invalid_mask = q_s.new_ones((mb_size, len_padded), dtype=torch.uint8)
+        invalid_mask = q_s.new_ones((mb_size, len_padded), dtype=torch.bool)
 
         for i, (start, end) in enumerate(zip(batch_idxs.boundaries_np[:-1], batch_idxs.boundaries_np[1:])):
             q_padded[:,i,:end-start,:] = q_s[:,start:end,:]
@@ -758,7 +758,11 @@ class NKChartParser(nn.Module):
             nn.ReLU(),
         )
 
-        self.label_proj = nn.Linear(hparams.d_label_hidden, label_vocab.size - 1)
+        self.zero_empty = hparams.zero_empty
+        self.label_proj = nn.Linear(
+            hparams.d_label_hidden,
+            label_vocab.size - 1 if hparams.zero_empty else label_vocab.size
+        )
 
         if hparams.predict_tags:
             assert not hparams.use_tags, "use_tags and predict_tags are mutually exclusive"
@@ -867,6 +871,7 @@ class NKChartParser(nn.Module):
         return_span_representations=False,
         span_index = None,
         k = None,
+        zero_empty = False,
     ):
         # If return span representations, don't train
         #is_train = golds is not None and not return_span_representations
@@ -1050,7 +1055,7 @@ class NKChartParser(nn.Module):
             features = all_encoder_layers
 
             if self.encoder is not None:
-                features_packed = features.masked_select(all_word_end_mask.to(torch.uint8).unsqueeze(-1)).reshape(-1, features.shape[-1])
+                features_packed = features.masked_select(all_word_end_mask.to(torch.bool).unsqueeze(-1)).reshape(-1, features.shape[-1])
 
                 # For now, just project the features from the last word piece in each word
                 extra_content_annotations = self.project_bert(features_packed)
@@ -1079,8 +1084,8 @@ class NKChartParser(nn.Module):
         else:
             assert self.bert is not None
             features = self.project_bert(features)
-            fencepost_annotations_start = features.masked_select(all_word_start_mask.to(torch.uint8).unsqueeze(-1)).reshape(-1, features.shape[-1])
-            fencepost_annotations_end = features.masked_select(all_word_end_mask.to(torch.uint8).unsqueeze(-1)).reshape(-1, features.shape[-1])
+            fencepost_annotations_start = features.masked_select(all_word_start_mask.to(torch.bool).unsqueeze(-1)).reshape(-1, features.shape[-1])
+            fencepost_annotations_end = features.masked_select(all_word_end_mask.to(torch.bool).unsqueeze(-1)).reshape(-1, features.shape[-1])
             if self.f_tag is not None:
                 tag_annotations = fencepost_annotations_end
 
@@ -1151,12 +1156,14 @@ class NKChartParser(nn.Module):
                         # num_indices x k
                         labels, distances = span_index.annoy_topk(rep, k)
                         # use all of top k
-                        np.add.at(
+                        label_scores_chart[left,right][np.concatenate(labels)] = float("-inf")
+                        np.logaddexp.at(
                             label_scores_chart[left,right],
                             np.concatenate(labels),
                             np.concatenate(distances),
                         )
-                label_scores_chart[:,:,0] = 0
+                if zero_empty:
+                    label_scores_chart[:,:,0] = 0
                 decoder_args = dict(
                     sentence_len=T,
                     label_scores_chart=label_scores_chart,
@@ -1248,10 +1255,11 @@ class NKChartParser(nn.Module):
         cells_label_scores = self.label_proj(self.f_rep(
             fencepost_annotations_end[cells_j] - fencepost_annotations_start[cells_i]
         ))
-        cells_label_scores = torch.cat([
-            cells_label_scores.new_zeros((cells_label_scores.size(0), 1)),
-            cells_label_scores
-        ], 1)
+        if self.zero_empty:
+            cells_label_scores = torch.cat([
+                cells_label_scores.new_zeros((cells_label_scores.size(0), 1)),
+                cells_label_scores
+            ], 1)
         cells_scores = torch.gather(cells_label_scores, 1, cells_label[:, None])
         loss = cells_scores[:num_p].sum() - cells_scores[num_p:].sum() + paugment_total
 
@@ -1272,12 +1280,13 @@ class NKChartParser(nn.Module):
             - torch.unsqueeze(fencepost_annotations_start, 1)
         )
         label_scores_chart = self.label_proj(self.f_rep(span_features))
-        label_scores_chart = torch.cat([
-            label_scores_chart.new_zeros(
-                (label_scores_chart.size(0), label_scores_chart.size(1), 1),
-            ),
-            label_scores_chart,
-        ], 2)
+        if self.zero_empty:
+            label_scores_chart = torch.cat([
+                label_scores_chart.new_zeros(
+                    (label_scores_chart.size(0), label_scores_chart.size(1), 1),
+                ),
+                label_scores_chart,
+            ], 2)
         return label_scores_chart
 
     def parse_from_annotations(
