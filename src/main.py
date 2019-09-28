@@ -91,6 +91,8 @@ def make_hparams():
 
         zero_empty=True,
 
+        gpu_cky=False,
+
         # Integration strategy of retrieved labels
         # - soft mixes in representation space
         # - hard mixes in score space
@@ -695,7 +697,7 @@ def main():
     subparser.add_argument("--eval-batch-size", type=int, default=100)
     subparser.add_argument("--use-neighbours", action="store_true")
     subparser.add_argument("--index-path", default="index")
-    subparser.add_argument("--nn-prefix", default="all_spans", required=True)
+    subparser.add_argument("--nn-prefix", default="all_spans")
     subparser.add_argument("--label-index", action="store_true")
     subparser.add_argument("--k", type=int, default=8)
     subparser.add_argument("--zero-empty", action="store_true")

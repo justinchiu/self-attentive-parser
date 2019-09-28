@@ -6,6 +6,8 @@ import torch
 import torch.nn as nn
 import torch.nn.init as init
 
+import torch_struct
+
 use_cuda = torch.cuda.is_available()
 if use_cuda:
     torch_t = torch.cuda
@@ -758,10 +760,10 @@ class NKChartParser(nn.Module):
             nn.ReLU(),
         )
 
-        self.zero_empty = hparams.zero_empty
+        self.zero_empty = hparams.zero_empty if hasattr(hparams, "zero_empty") else True
         self.label_proj = nn.Linear(
             hparams.d_label_hidden,
-            label_vocab.size - 1 if hparams.zero_empty else label_vocab.size
+            label_vocab.size - 1 if self.zero_empty else label_vocab.size,
         )
 
         if hparams.predict_tags:
@@ -816,8 +818,6 @@ class NKChartParser(nn.Module):
                     'f_label.0.bias',
                     'f_label.1.a_2',
                     'f_label.1.b_2',
-                    #'f_label.3.weight',
-                    #'f_label.3.bias',
                 ]
                 for key in f_rep_keys:
                     model[key.replace("label", "rep")] = model[key]
@@ -1156,12 +1156,21 @@ class NKChartParser(nn.Module):
                         # num_indices x k
                         labels, distances = span_index.annoy_topk(rep, k)
                         # use all of top k
+                        #np.add.at(
                         label_scores_chart[left,right][np.concatenate(labels)] = float("-inf")
                         np.logaddexp.at(
                             label_scores_chart[left,right],
                             np.concatenate(labels),
                             np.concatenate(distances),
                         )
+                        """
+                        # Check if other neighbours are empty when top label is not empty
+                        num0 = np.equal(0, labels).sum()
+                        if labels[0,0] != 0 and num0 > 4:
+                            print(f"{num0} / 8")
+                            #import pdb; pdb.set_trace()
+                            pass
+                        """
                 if zero_empty:
                     label_scores_chart[:,:,0] = 0
                 decoder_args = dict(
@@ -1198,6 +1207,7 @@ class NKChartParser(nn.Module):
                             return children
 
                 tree = make_tree()[0]
+                #import pdb; pdb.set_trace()
                 batch_trees.append(tree)
                 batch_scores.append(score)
             return batch_trees, batch_scores
@@ -1342,6 +1352,7 @@ class NKChartParser(nn.Module):
         # generate trees, only scores and span indices. When converting to a
         # tree, we assume that the indices follow a preorder traversal.
         score, p_i, p_j, p_label, _ = chart_helper.decode(force_gold, **decoder_args)
+        import pdb; pdb.set_trace()
         last_splits = []
         idx = -1
         def make_tree():
