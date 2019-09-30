@@ -30,6 +30,8 @@ model = ts.CKY_CRF
 max_struct = model(ts.MaxSemiring)
 
 def gs(chart, struct):
+    # don't allow root symbol to be empty
+    chart[:,0,-1,0].fill_(-1e8)
     spans = struct.marginals(chart).nonzero()
     spans[:,2] += 1
     return spans
@@ -38,7 +40,6 @@ def cat(chart, dim):
     shape = list(chart.shape)
     shape[dim] = 1
     return torch.cat([ chart, torch.zeros(shape) ], dim=dim)
-
 
 def cs(spans, spans0, n):
     return spans[spans.eq(n)[:,0]][:,1:].tolist(), spans0[n]
@@ -52,5 +53,5 @@ spans = gs(chart[:,:-1, 1:], max_struct)
 
 correct = [np.allclose(*cs(spans, spans0, n)) for n in range(N)]
 
-print(all(correct))    
+print(all(correct))
 import pdb; pdb.set_trace()
