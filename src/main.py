@@ -15,13 +15,15 @@ import numpy as np
 import evaluate
 import index
 import nkutil
-import parse_nk
+import parse_jc
 import vocabulary
 import trees
-tokens = parse_nk
+tokens = parse_jc
+
+import parse_nk as old
 
 def torch_load(load_path):
-    if parse_nk.use_cuda:
+    if parse_jc.use_cuda:
         return torch.load(load_path)
     else:
         return torch.load(load_path, map_location=lambda storage, location: storage)
@@ -212,9 +214,9 @@ def run_train(args, hparams):
     if load_path is not None:
         print(f"Loading parameters from {load_path}")
         info = torch_load(load_path)
-        parser = parse_nk.NKChartParser.from_spec(info['spec'], info['state_dict'])
+        parser = parse_jc.NKChartParser.from_spec(info['spec'], info['state_dict'])
     else:
-        parser = parse_nk.NKChartParser(
+        parser = parse_jc.NKChartParser(
             tag_vocab,
             word_vocab,
             label_vocab,
@@ -381,7 +383,7 @@ def run_test(args):
 
     info = torch_load(args.model_path_base)
     assert 'hparams' in info['spec'], "Older savefiles not supported"
-    parser = parse_nk.NKChartParser.from_spec(info['spec'], info['state_dict'])
+    parser = parse_jc.NKChartParser.from_spec(info['spec'], info['state_dict'])
 
     print("Parsing test sentences...")
     start_time = time.time()
@@ -455,7 +457,7 @@ def run_ensemble(args):
 
         info = torch_load(model_path_base)
         assert 'hparams' in info['spec'], "Older savefiles not supported"
-        parser = parse_nk.NKChartParser.from_spec(info['spec'], info['state_dict'])
+        parser = parse_jc.NKChartParser.from_spec(info['spec'], info['state_dict'])
         parsers.append(parser)
 
     # Ensure that label scores charts produced by the models can be combined
@@ -507,7 +509,7 @@ def run_parse(args):
 
     info = torch_load(args.model_path_base)
     assert 'hparams' in info['spec'], "Older savefiles not supported"
-    parser = parse_nk.NKChartParser.from_spec(info['spec'], info['state_dict'])
+    parser = parse_jc.NKChartParser.from_spec(info['spec'], info['state_dict'])
 
     print("Parsing sentences...")
     with open(args.input_path) as input_file:
@@ -554,19 +556,19 @@ def run_viz(args):
     info = torch_load(args.model_path_base)
 
     assert 'hparams' in info['spec'], "Only self-attentive models are supported"
-    parser = parse_nk.NKChartParser.from_spec(info['spec'], info['state_dict'])
+    parser = parse_jc.NKChartParser.from_spec(info['spec'], info['state_dict'])
 
     from viz import viz_attention
 
     stowed_values = {}
-    orig_multihead_forward = parse_nk.MultiHeadAttention.forward
+    orig_multihead_forward = parse_jc.MultiHeadAttention.forward
     def wrapped_multihead_forward(self, inp, batch_idxs, **kwargs):
         res, attns = orig_multihead_forward(self, inp, batch_idxs, **kwargs)
         stowed_values[f'attns{stowed_values["stack"]}'] = attns.cpu().data.numpy()
         stowed_values['stack'] += 1
         return res, attns
 
-    parse_nk.MultiHeadAttention.forward = wrapped_multihead_forward
+    parse_jc.MultiHeadAttention.forward = wrapped_multihead_forward
 
     # Select the sentences we will actually be visualizing
     max_len_viz = 15
@@ -607,7 +609,7 @@ def run_index(args):
 
     info = torch_load(args.model_path_base)
     assert 'hparams' in info['spec'], "Older savefiles not supported"
-    parser = parse_nk.NKChartParser.from_spec(info['spec'], info['state_dict'])
+    parser = parse_jc.NKChartParser.from_spec(info['spec'], info['state_dict'])
 
     print("Getting labelled span representations")
     start_time = time.time()

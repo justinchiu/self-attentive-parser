@@ -103,7 +103,7 @@ class SpanIndex:
             [dist for idx, dist in zip(*idx_and_distance)]
             for idx_and_distance in idx_and_distances
         ])
-        # only return label
+        # only return label, return span_info later?
         return labels, distances
 
     def build(self, n_trees=16):

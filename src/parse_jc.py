@@ -7,6 +7,7 @@ import torch.nn as nn
 import torch.nn.init as init
 
 import torch_struct as ts
+import cky
 
 use_cuda = torch.cuda.is_available()
 if use_cuda:
@@ -1207,7 +1208,7 @@ class NKChartParser(nn.Module):
                             return children
 
                 tree = make_tree()[0]
-                #import pdb; pdb.set_trace()
+
                 batch_trees.append(tree)
                 batch_scores.append(score)
             return batch_trees, batch_scores
@@ -1248,7 +1249,12 @@ class NKChartParser(nn.Module):
         glabels = []
         with torch.no_grad():
             for i, (start, end) in enumerate(zip(fp_startpoints, fp_endpoints)):
-                p_i, p_j, p_label, p_augment, g_i, g_j, g_label = self.parse_from_annotations(fencepost_annotations_start[start:end,:], fencepost_annotations_end[start:end,:], sentences[i], golds[i])
+                p_i, p_j, p_label, p_augment, g_i, g_j, g_label = self.parse_from_annotations(
+                    fencepost_annotations_start[start:end,:],
+                    fencepost_annotations_end[start:end,:],
+                    sentences[i],
+                    golds[i],
+                )
                 paugment_total += p_augment
                 num_p += p_i.shape[0]
                 pis.append(p_i + start)
@@ -1257,6 +1263,31 @@ class NKChartParser(nn.Module):
                 gjs.append(g_j + start)
                 plabels.append(p_label)
                 glabels.append(g_label)
+        # unused, if we wanted to batch and use log loss
+        # but just stick with margin loss for now...
+        """
+        fp_ann_start = cky.pad(fencepost_annotations_start, batch_idxs)
+        fp_ann_end = cky.pad(fencepost_annotations_end, batch_idxs)
+        span_feats = fp_ann_end.unsqueeze(1) - fp_ann_start.unsqueeze(2)
+        span_reps = self.f_rep(span_feats)
+        padded_chart = self.label_proj(span_reps)
+        marg = cky.batch_marg(padded_chart, lengths=batch_idxs.seq_lens_np-1)
+        spans = cky.exclusive_spans(marg.nonzero())
+        """
+        """
+        def check(i):
+            if i > 0:
+                cs = batch_idxs.seq_lens_np.cumsum()
+                print(
+                    sorted(list(zip(pis[i] - cs[i-1], pjs[i] - cs[i-1], plabels[i])))
+                )
+            else:
+                print(
+                    sorted(list(zip(pis[i], pjs[i], plabels[i])))
+                )
+            print(spans[spans[:,0] == i])
+        import pdb; pdb.set_trace()
+        """
 
         cells_i = from_numpy(np.concatenate(pis + gis))
         cells_j = from_numpy(np.concatenate(pjs + gjs))
