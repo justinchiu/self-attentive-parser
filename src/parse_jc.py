@@ -767,6 +767,8 @@ class NKChartParser(nn.Module):
             label_vocab.size - 1 if self.zero_empty else label_vocab.size,
         )
 
+        self.label_weights = nn.Parameter(torch.ones(label_vocab.size))
+
         if hparams.predict_tags:
             assert not hparams.use_tags, "use_tags and predict_tags are mutually exclusive"
             self.f_tag = nn.Sequential(
@@ -827,8 +829,8 @@ class NKChartParser(nn.Module):
                 model["label_proj.bias"] = model["f_label.3.bias"]
                 del model["f_label.3.weight"]
                 del model["f_label.3.bias"]
-
-            res.load_state_dict(model)
+            # TODO: If adding new label weights, don't load those?
+            res.load_state_dict(model, strict=False)
         else:
             state = {k: v for k,v in res.state_dict().items() if k not in model}
             state.update(model)
@@ -1128,7 +1130,7 @@ class NKChartParser(nn.Module):
                 span_representations.append(span_features)
             return span_representations
 
-        if span_index is not None:
+        if span_index is not None and not is_train:
             # Use nearest neighbour lookups for populating chart.
             batch_trees, batch_scores = [], []
             for i, (start, end) in enumerate(zip(fp_startpoints, fp_endpoints)):
@@ -1157,7 +1159,6 @@ class NKChartParser(nn.Module):
                         # num_indices x k
                         labels, distances = span_index.annoy_topk(rep, k)
                         # use all of top k
-                        #np.add.at(
                         label_scores_chart[left,right][np.concatenate(labels)] = float("-inf")
                         np.logaddexp.at(
                             label_scores_chart[left,right],
@@ -1239,6 +1240,8 @@ class NKChartParser(nn.Module):
         # Since this code is not undergoing algorithmic changes, it makes sense
         # to include the optimization even though it may only be a 10% speedup.
         # Note that no dropout occurs in the label portion of the network
+        #
+        # Nah, just backprop
         pis = []
         pjs = []
         plabels = []
@@ -1247,13 +1250,32 @@ class NKChartParser(nn.Module):
         gis = []
         gjs = []
         glabels = []
-        with torch.no_grad():
+
+        jc_pis = []
+        jc_pjs = []
+        jc_plabels = []
+        jc_gis = []
+        jc_gjs = []
+        jc_glabels = []
+        charts = []
+        env = torch.no_grad if span_index is None else torch.enable_grad
+        with env():
             for i, (start, end) in enumerate(zip(fp_startpoints, fp_endpoints)):
+                chart = self.label_scores_from_annotations(
+                    fencepost_annotations_start[start:end,:],
+                    fencepost_annotations_end[start:end,:],
+                    span_index = span_index,
+                    zero_empty = zero_empty,
+                    k = k,
+                ) if span_index is not None else None
+                #import pdb; pdb.set_trace()
+                # TODO: FIX BACKPROP THROUGH CHART
                 p_i, p_j, p_label, p_augment, g_i, g_j, g_label = self.parse_from_annotations(
                     fencepost_annotations_start[start:end,:],
                     fencepost_annotations_end[start:end,:],
                     sentences[i],
                     golds[i],
+                    chart = chart,
                 )
                 paugment_total += p_augment
                 num_p += p_i.shape[0]
@@ -1263,6 +1285,16 @@ class NKChartParser(nn.Module):
                 gjs.append(g_j + start)
                 plabels.append(p_label)
                 glabels.append(g_label)
+
+                if chart is not None:
+                    charts.append(chart)
+                    jc_pis.append(p_i)
+                    jc_pjs.append(p_j)
+                    jc_plabels.append(p_label)
+                    jc_gis.append(g_i)
+                    jc_gjs.append(g_j)
+                    jc_glabels.append(g_label)
+
         # unused, if we wanted to batch and use log loss
         # but just stick with margin loss for now...
         """
@@ -1273,8 +1305,6 @@ class NKChartParser(nn.Module):
         padded_chart = self.label_proj(span_reps)
         marg = cky.batch_marg(padded_chart, lengths=batch_idxs.seq_lens_np-1)
         spans = cky.exclusive_spans(marg.nonzero())
-        """
-        """
         def check(i):
             if i > 0:
                 cs = batch_idxs.seq_lens_np.cumsum()
@@ -1288,6 +1318,19 @@ class NKChartParser(nn.Module):
             print(spans[spans[:,0] == i])
         import pdb; pdb.set_trace()
         """
+        if span_index is not None:
+            pscore = 0
+            gscore = 0
+            for pi, pj, pl, gi, gj, gl, chart in zip(
+                jc_pis, jc_pjs, jc_plabels,
+                jc_gis, jc_gjs, jc_glabels,
+                charts,
+            ):
+                pscore += sum(chart[x] for x in zip(pi, pj, pl))
+                gscore += sum(chart[x] for x in zip(gi, gj, gl))
+            loss = pscore - gscore + paugment_total
+            #print(self.label_weights)
+            return None, loss
 
         cells_i = from_numpy(np.concatenate(pis + gis))
         cells_j = from_numpy(np.concatenate(pjs + gjs))
@@ -1313,6 +1356,9 @@ class NKChartParser(nn.Module):
         self,
         fencepost_annotations_start,
         fencepost_annotations_end,
+        span_index = None,
+        zero_empty = False,
+        k = None,
     ):
         # Note that the bias added to the final layer norm is useless because
         # this subtraction gets rid of it
@@ -1320,7 +1366,51 @@ class NKChartParser(nn.Module):
             torch.unsqueeze(fencepost_annotations_end, 0)
             - torch.unsqueeze(fencepost_annotations_start, 1)
         )
-        label_scores_chart = self.label_proj(self.f_rep(span_features))
+        span_reps = self.f_rep(span_features)
+        if span_index is not None:
+            # loop over chart
+            # just to be consistent
+            T = fencepost_annotations_end.shape[0] - 1
+            label_scores_chart = np.zeros(
+                (T+1, T+1, len(self.label_vocab.values)),
+                dtype = np.float32,
+            )
+            """
+            chart = torch.zeros(
+                (T+1, T+1, len(self.label_vocab.values)),
+                dtype = torch.float32,
+            )
+            """
+            for length in range(1, T+1):
+                for left in range(0, T+1-length):
+                    right = left + length
+                    rep = span_reps[left, right]
+                    # num_indices x k
+                    labels, distances = span_index.annoy_topk(rep, k)
+                    # use all of top k
+                    label_scores_chart[left,right][np.concatenate(labels)] = float("-inf")
+                    #import pdb; pdb.set_trace()
+                    np.logaddexp.at(
+                    #np.add.at(
+                        label_scores_chart[left,right],
+                        np.concatenate(labels),
+                        np.concatenate(distances),
+                    )
+                    """
+                    # Check if other neighbours are empty when top label is not empty
+                    num0 = np.equal(0, labels).sum()
+                    if labels[0,0] != 0 and num0 > 4:
+                        print(f"{num0} / 8")
+                        #import pdb; pdb.set_trace()
+                        pass
+                    """
+            if zero_empty:
+                label_scores_chart[:,:,0] = 0
+            chart = torch.FloatTensor(label_scores_chart).to(fencepost_annotations_end.device)
+            return chart * self.label_weights
+
+        # if no span_index, proceed as normal
+        label_scores_chart = self.label_proj(span_reps)
         if self.zero_empty:
             label_scores_chart = torch.cat([
                 label_scores_chart.new_zeros(
@@ -1336,12 +1426,13 @@ class NKChartParser(nn.Module):
         fencepost_annotations_end,
         sentence,
         gold=None,
+        chart=None,
     ):
         is_train = gold is not None
         label_scores_chart = self.label_scores_from_annotations(
             fencepost_annotations_start,
             fencepost_annotations_end,
-        )
+        ) if chart is None else chart
         label_scores_chart_np = label_scores_chart.cpu().data.numpy()
 
         if is_train:

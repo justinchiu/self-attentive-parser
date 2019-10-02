@@ -12,9 +12,11 @@ def nk2ts(chart):
 
 def batch_marg(chart, semiring=ts.MaxSemiring, lengths=None):
     chart_ts = nk2ts(chart).clone()
+    # is lengths-1 correct?
     chart_ts[:,0,lengths-1,0].fill_(-1e8) 
     model = ts.CKY_CRF
     struct = model(semiring)
+    # is lengths-1 correct?
     return struct.marginals(chart_ts, lengths=lengths-1)
 
 def exclusive_spans(spans):
@@ -29,7 +31,7 @@ def pad(x, batch_idxs):
     lens = batch_idxs.seq_lens_np
     H = x.shape[-1]
 
-    # filter out sentence boundaries
+    # filter out sentence boundaries, maybe
     xmask = np.zeros(x.shape[0])
     start = 0
     for l in lens:
@@ -38,18 +40,17 @@ def pad(x, batch_idxs):
     xmask = torch.BoolTensor(xmask).to(x.device)
     x = x[xmask]
 
+    # flatten padded tensor and index copy in
     padded = x.new(
         bsz, len_padded, H,
         device = x.device,
     )
     padded.fill_(0)
-    #mask = np.zeros(batch_idxs.seq_lens_np.sum())
     mask = np.zeros(bsz * len_padded)
     for i, l in enumerate(lens):
         mask[i * len_padded: i * len_padded + l - 1] = 1
     mask = torch.BoolTensor(mask).to(x.device)
     index = torch.arange(0, mask.shape[0], device=x.device)[mask]
-    #"""
     padded = (padded
         .view(-1, H)
         .index_copy(
@@ -59,3 +60,7 @@ def pad(x, batch_idxs):
         )
     )
     return padded.view(bsz, len_padded, H)
+
+def from_parts():
+    # convert from tree to chart representation
+    pass

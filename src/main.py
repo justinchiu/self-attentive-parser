@@ -93,12 +93,13 @@ def make_hparams():
 
         zero_empty=True,
 
-        gpu_cky=False,
+        batch_cky=False,
+        label_weights=False,
 
         # Integration strategy of retrieved labels
         # - soft mixes in representation space
         # - hard mixes in score space
-        integration = "soft", # ["soft", "hard"]
+        integration = "hard", # ["soft", "hard"]
     )
 
 def run_train(args, hparams):
@@ -209,8 +210,7 @@ def run_train(args, hparams):
         print_vocabulary("Label", label_vocab)
 
     print("Initializing model...")
-
-    load_path = None
+    load_path = args.model_path_base if args.model_path_base.endswith(".pt") else None
     if load_path is not None:
         print(f"Loading parameters from {load_path}")
         info = torch_load(load_path)
@@ -224,11 +224,37 @@ def run_train(args, hparams):
             hparams,
         )
 
+    span_index, K = None, None
+    if args.use_neighbours:
+        span_index = index.SpanIndex(
+            num_indices = len(parser.label_vocab.values)
+                if args.label_index else 1,
+        )
+        prefix = index.get_index_prefix(
+            index_base_path = args.index_path,
+            full_model_path = args.model_path_base,
+            nn_prefix = args.nn_prefix,
+        )
+        span_index.load(prefix)
+        K = args.k
+        assert K > 0
+
+    if args.label_weights_only:
+        # freeze everything except "label_weights"
+        for name, param in parser.named_parameters():
+            if name != "label_weights":
+                param.requires_grad = False
+    else:
+        parser.label_weights.requires_grad = False
+
     print("Initializing optimizer...")
     trainable_parameters = [param for param in parser.parameters() if param.requires_grad]
     trainer = torch.optim.Adam(trainable_parameters, lr=1., betas=(0.9, 0.98), eps=1e-9)
     if load_path is not None:
-        trainer.load_state_dict(info['trainer'])
+        try:
+            trainer.load_state_dict(info['trainer'])
+        except:
+            print("Couldn't load optim state.")
 
     def set_lr(new_lr):
         for param_group in trainer.param_groups:
@@ -272,7 +298,12 @@ def run_train(args, hparams):
         for dev_start_index in range(0, len(dev_treebank), args.eval_batch_size):
             subbatch_trees = dev_treebank[dev_start_index:dev_start_index+args.eval_batch_size]
             subbatch_sentences = [[(leaf.tag, leaf.word) for leaf in tree.leaves()] for tree in subbatch_trees]
-            predicted, _ = parser.parse_batch(subbatch_sentences)
+            predicted, _ = parser.parse_batch(
+                subbatch_sentences,
+                span_index = span_index,
+                k = K,
+                zero_empty = parser.zero_empty,
+            )
             del _
             dev_predicted.extend([p.convert() for p in predicted])
 
@@ -306,7 +337,7 @@ def run_train(args, hparams):
                 'spec': parser.spec,
                 'state_dict': parser.state_dict(),
                 'trainer' : trainer.state_dict(),
-                }, best_dev_model_path + ".pt")
+            }, best_dev_model_path + ".pt")
 
     for epoch in itertools.count(start=1):
         if args.epochs is not None and epoch > args.epochs:
@@ -325,7 +356,13 @@ def run_train(args, hparams):
             batch_num_tokens = sum(len(sentence) for sentence in batch_sentences)
 
             for subbatch_sentences, subbatch_trees in parser.split_batch(batch_sentences, batch_trees, args.subbatch_max_tokens):
-                _, loss = parser.parse_batch(subbatch_sentences, subbatch_trees)
+                _, loss = parser.parse_batch(
+                    subbatch_sentences,
+                    subbatch_trees,
+                    span_index = span_index,
+                    k = K,
+                    zero_empty = parser.zero_empty,
+                )
 
                 if hparams.predict_tags:
                     loss = loss[0] / len(batch_trees) + loss[1] / batch_num_tokens
@@ -689,6 +726,13 @@ def main():
     subparser.add_argument("--checks-per-epoch", type=int, default=4)
     subparser.add_argument("--print-vocabs", action="store_true")
     subparser.add_argument("--zero-empty", action="store_true")
+
+    subparser.add_argument("--label-weights-only", action="store_true")
+    subparser.add_argument("--use-neighbours", action="store_true")
+    subparser.add_argument("--index-path", default="index")
+    subparser.add_argument("--nn-prefix", default="all_spans")
+    subparser.add_argument("--label-index", action="store_true")
+    subparser.add_argument("--k", type=int, default=8)
 
     subparser = subparsers.add_parser("test")
     subparser.set_defaults(callback=run_test)
