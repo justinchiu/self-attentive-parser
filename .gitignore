@@ -47,6 +47,6 @@ var/
 *.egg
 
 # Nearest neighbour files
-*.ann
-*.info
+*.ann*
+*.info*
 

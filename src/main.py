@@ -95,6 +95,7 @@ def make_hparams():
 
         batch_cky=False,
         label_weights=False,
+        no_mlp=False,
 
         # Integration strategy of retrieved labels
         # - soft mixes in representation space
@@ -226,7 +227,14 @@ def run_train(args, hparams):
 
     span_index, K = None, None
     if args.use_neighbours:
+        """
         span_index = index.SpanIndex(
+            num_indices = len(parser.label_vocab.values)
+                if args.label_index else 1,
+            library = args.library,
+        )
+        """
+        span_index = index.AnnoyIndex(
             num_indices = len(parser.label_vocab.values)
                 if args.label_index else 1,
         )
@@ -426,7 +434,8 @@ def run_test(args):
     start_time = time.time()
 
     if args.use_neighbours:
-        span_index = index.SpanIndex(
+        index_const = index.FaissIndex if args.library == "faiss" else index.AnnoyIndex
+        span_index = index_const(
             num_indices = len(parser.label_vocab.values)
                 if args.label_index else 1,
         )
@@ -647,6 +656,7 @@ def run_index(args):
     info = torch_load(args.model_path_base)
     assert 'hparams' in info['spec'], "Older savefiles not supported"
     parser = parse_jc.NKChartParser.from_spec(info['spec'], info['state_dict'])
+    parser.no_mlp = args.no_mlp
 
     print("Getting labelled span representations")
     start_time = time.time()
@@ -655,8 +665,22 @@ def run_index(args):
     use_label_index = args.label_index
     num_labels = len(parser.label_vocab.values) if use_label_index else 1
 
-    span_index = index.SpanIndex(num_indices = num_labels)
+    """
+    span_index = index.SpanIndex(
+        num_indices = num_labels,
+        library = args.library,
+    )
+    """
+    span_index = (
+        index.FaissIndex(num_indices=num_labels)
+        if args.library == "faiss"
+        else index.AnnoyIndex(num_labels)
+    )
 
+
+    # aggregate indices and reps
+    span_reps = []
+    span_infos = []
     for start_index in range(0, len(train_treebank), args.batch_size):
         subbatch_trees = train_treebank[start_index:start_index+args.batch_size]
         subbatch_sentences = [
@@ -688,12 +712,18 @@ def run_index(args):
                             left = left,
                             right = right,
                         )
-                        span_index.add_item(
-                            key = span_rep,
-                            value = span_info,
-                            index = label_idx if use_label_index else 0,
-                        )
-    span_index.build()
+                        span_reps.append(span_rep)
+                        span_infos.append(span_info)
+    # clean up later, refactor back into index.py
+    if args.library == "faiss":
+        span_index.raw_indices[0].train(np.stack(span_reps))
+        span_index.raw_indices[0].add(np.stack(span_reps))
+        span_index.raw_span_infos[0] = span_infos
+    else:
+        for rep, info in zip(span_reps, span_infos):
+            span_index.add_item(rep, info)
+
+    #span_index.build()
     prefix = index.get_index_prefix(
         index_base_path = args.index_path,
         full_model_path = args.model_path_base,
@@ -701,7 +731,7 @@ def run_index(args):
     )
     print(f"Saving index to {prefix}")
     span_index.save(prefix)
-    span_index.raw_indices[0].get_nns_by_item(0, 10)
+    #span_index.raw_indices[0].get_nns_by_item(0, 10)
 
     print(f"index-elapsed {format_elapsed(start_time)}")
 
@@ -729,6 +759,7 @@ def main():
 
     subparser.add_argument("--label-weights-only", action="store_true")
     subparser.add_argument("--use-neighbours", action="store_true")
+    subparser.add_argument("--library", default="faiss", choices=["faiss", "annoy"])
     subparser.add_argument("--index-path", default="index")
     subparser.add_argument("--nn-prefix", default="all_spans")
     subparser.add_argument("--label-index", action="store_true")
@@ -741,7 +772,9 @@ def main():
     subparser.add_argument("--test-path", default="data/23.auto.clean")
     subparser.add_argument("--test-path-raw", type=str)
     subparser.add_argument("--eval-batch-size", type=int, default=100)
+
     subparser.add_argument("--use-neighbours", action="store_true")
+    subparser.add_argument("--library", default="faiss", choices=["faiss", "annoy"])
     subparser.add_argument("--index-path", default="index")
     subparser.add_argument("--nn-prefix", default="all_spans")
     subparser.add_argument("--label-index", action="store_true")
@@ -776,10 +809,15 @@ def main():
     subparser.add_argument("--train-path-raw", type=str)
     subparser.add_argument("--batch-size", type=int, default=256)
     subparser.add_argument("--subbatch-max-tokens", type=int, default=2000)
+    subparser.add_argument("--library", default="faiss", choices=["faiss", "annoy"])
     subparser.add_argument("--index-path", default="index")
     subparser.add_argument("--nn-prefix", default="all_spans", required=True)
     subparser.add_argument("--label-index", action="store_true")
     subparser.add_argument("--ignore-empty", action="store_true")
+    subparser.add_argument("--no-mlp", action="store_true",
+        help="Use random projection instead of chart MLP")
+    subparser.add_argument("--pca", action="store_true",
+        help="Perform PCA on span reps for dim red")
 
     args = parser.parse_args()
     args.callback(args)

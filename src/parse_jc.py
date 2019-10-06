@@ -6,6 +6,8 @@ import torch
 import torch.nn as nn
 import torch.nn.init as init
 
+import scatter
+
 import torch_struct as ts
 import cky
 
@@ -13,7 +15,8 @@ use_cuda = torch.cuda.is_available()
 if use_cuda:
     torch_t = torch.cuda
     def from_numpy(ndarray):
-        return torch.from_numpy(ndarray).pin_memory().cuda(non_blocking = True)
+        #return torch.from_numpy(ndarray).pin_memory().cuda(non_blocking = True)
+        return torch.from_numpy(ndarray).pin_memory().cuda(non_blocking = False)
     print("USING CUDA")
 else:
     print("Not using CUDA!")
@@ -755,6 +758,10 @@ class NKChartParser(nn.Module):
             self.embedding = None
             self.encoder = None
 
+        self.random_proj = nn.Linear(hparams.d_model, hparams.d_label_hidden)
+        self.random_proj.weight.requires_grad = False
+        self.no_mlp = hparams.no_mlp if hasattr(hparams, "no_mlp") else False
+
         self.f_rep = nn.Sequential(
             nn.Linear(hparams.d_model, hparams.d_label_hidden),
             LayerNormalization(hparams.d_label_hidden),
@@ -767,7 +774,8 @@ class NKChartParser(nn.Module):
             label_vocab.size - 1 if self.zero_empty else label_vocab.size,
         )
 
-        self.label_weights = nn.Parameter(torch.ones(label_vocab.size))
+        #self.label_weights = nn.Parameter(torch.ones(label_vocab.size))
+        self.label_weights = nn.Parameter(torch.zeros(label_vocab.size))
 
         if hparams.predict_tags:
             assert not hparams.use_tags, "use_tags and predict_tags are mutually exclusive"
@@ -1126,7 +1134,11 @@ class NKChartParser(nn.Module):
                     torch.unsqueeze(fp_end, 0)
                     - torch.unsqueeze(fp_start, 1)
                 )
-                span_features = self.f_rep(span_features)
+                span_features = (
+                    self.f_rep(span_features)
+                    if not self.no_mlp
+                    else self.random_proj(span_features)
+                )
                 span_representations.append(span_features)
             return span_representations
 
@@ -1145,39 +1157,53 @@ class NKChartParser(nn.Module):
                     torch.unsqueeze(fp_end, 0)
                     - torch.unsqueeze(fp_start, 1)
                 )
+                # ADD SWITCH FOR THIS: f_rep or random_proj or pca
+                #import pdb; pdb.set_trace()
                 span_features = self.f_rep(span_features)
+                #span_features = self.random_proj(span_features)
                 # loop over chart
                 T = len(sentence)
                 label_scores_chart = np.zeros(
                     (T+1, T+1, len(self.label_vocab.values)),
                     dtype = np.float32,
                 )
-                for length in range(1, T+1):
-                    for left in range(0, T+1-length):
-                        right = left + length
-                        rep = span_features[left, right]
-                        # num_indices x k
-                        labels, distances = span_index.annoy_topk(rep, k)
-                        # use all of top k
-                        label_scores_chart[left,right][np.concatenate(labels)] = float("-inf")
-                        np.logaddexp.at(
-                            label_scores_chart[left,right],
-                            np.concatenate(labels),
-                            np.concatenate(distances),
-                        )
-                        """
-                        # Check if other neighbours are empty when top label is not empty
-                        num0 = np.equal(0, labels).sum()
-                        if labels[0,0] != 0 and num0 > 4:
-                            print(f"{num0} / 8")
-                            #import pdb; pdb.set_trace()
-                            pass
-                        """
+                indices = torch.LongTensor([
+                    (left, left+length)
+                    for length in range(1, T+1)
+                    for left in range(0, T+1-length)
+                ])
+                left = indices[:,0]
+                right = indices[:,1]
+                flat_indices = left * (T+1) + right
+                queries = span_features[left, right]
+                # for now
+                queries = queries.cpu().numpy()
+                labels, distances = span_index.topk(queries, k)
+                # only one index right now
+                cells = scatter.scatter_lse(
+                    distances[0],
+                    labels[0],
+                    dim = -1,
+                    dim_size = len(self.label_vocab.values),
+                    fill_value = 0,
+                )
+                flat_chart = torch.zeros((T+1) * (T+1), len(self.label_vocab.values))
+                flat_chart = flat_chart.scatter(
+                    0,
+                    flat_indices.unsqueeze(-1).expand_as(cells),
+                    cells,
+                )
+                #flat_chart.scatter(xdcells)
+                # ADD SWITCH FOR THIS AS WELL
+                #label_scores_chart *= self.label_weights.cpu().numpy()
                 if zero_empty:
                     label_scores_chart[:,:,0] = 0
                 decoder_args = dict(
                     sentence_len=T,
-                    label_scores_chart=label_scores_chart,
+                    label_scores_chart = flat_chart
+                        .view(T+1, T+1, flat_chart.shape[-1])
+                        .cpu()
+                        .numpy(),
                     gold=None,
                     label_vocab=self.label_vocab,
                     is_train=False,
@@ -1386,7 +1412,7 @@ class NKChartParser(nn.Module):
                     right = left + length
                     rep = span_reps[left, right]
                     # num_indices x k
-                    labels, distances = span_index.annoy_topk(rep, k)
+                    labels, distances = span_index.topk(rep, k)
                     # use all of top k
                     label_scores_chart[left,right][np.concatenate(labels)] = float("-inf")
                     #import pdb; pdb.set_trace()
