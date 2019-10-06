@@ -674,7 +674,7 @@ def run_index(args):
     span_index = (
         index.FaissIndex(num_indices=num_labels)
         if args.library == "faiss"
-        else index.AnnoyIndex(num_labels)
+        else index.AnnoyIndex(num_indices=num_labels)
     )
 
 

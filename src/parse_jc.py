@@ -15,8 +15,8 @@ use_cuda = torch.cuda.is_available()
 if use_cuda:
     torch_t = torch.cuda
     def from_numpy(ndarray):
-        #return torch.from_numpy(ndarray).pin_memory().cuda(non_blocking = True)
-        return torch.from_numpy(ndarray).pin_memory().cuda(non_blocking = False)
+        return torch.from_numpy(ndarray).pin_memory().cuda(non_blocking = True)
+        #return torch.from_numpy(ndarray).pin_memory().cuda(non_blocking = False)
     print("USING CUDA")
 else:
     print("Not using CUDA!")
@@ -1157,28 +1157,33 @@ class NKChartParser(nn.Module):
                     torch.unsqueeze(fp_end, 0)
                     - torch.unsqueeze(fp_start, 1)
                 )
-                # ADD SWITCH FOR THIS: f_rep or random_proj or pca
+                # TODO: ADD SWITCH FOR THIS: f_rep or random_proj or pca
                 #import pdb; pdb.set_trace()
-                span_features = self.f_rep(span_features)
+                span_features = self.f_rep(span_features).cpu().numpy()
                 #span_features = self.random_proj(span_features)
                 # loop over chart
                 T = len(sentence)
-                label_scores_chart = np.zeros(
-                    (T+1, T+1, len(self.label_vocab.values)),
-                    dtype = np.float32,
-                )
-                indices = torch.LongTensor([
+                indices = np.array([
                     (left, left+length)
                     for length in range(1, T+1)
                     for left in range(0, T+1-length)
-                ])
+                ], dtype=np.int32)
                 left = indices[:,0]
                 right = indices[:,1]
                 flat_indices = left * (T+1) + right
                 queries = span_features[left, right]
                 # for now
-                queries = queries.cpu().numpy()
                 labels, distances = span_index.topk(queries, k)
+
+                # numpy version
+                chart = np.zeros((T+1, T+1, len(self.label_vocab.values)), dtype=np.float32)
+                for le, ri, l, d in zip(
+                    left, right,
+                    labels[0], distances[0],
+                ):
+                    np.logaddexp.at(chart[le, ri], l, d)
+
+                """
                 # only one index right now
                 cells = scatter.scatter_lse(
                     distances[0],
@@ -1193,17 +1198,18 @@ class NKChartParser(nn.Module):
                     flat_indices.unsqueeze(-1).expand_as(cells),
                     cells,
                 )
-                #flat_chart.scatter(xdcells)
+                chart = flat_chart
+                    .view(T+1, T+1, flat_chart.shape[-1])
+                    .cpu()
+                    .numpy()
+                """
                 # ADD SWITCH FOR THIS AS WELL
                 #label_scores_chart *= self.label_weights.cpu().numpy()
                 if zero_empty:
                     label_scores_chart[:,:,0] = 0
                 decoder_args = dict(
                     sentence_len=T,
-                    label_scores_chart = flat_chart
-                        .view(T+1, T+1, flat_chart.shape[-1])
-                        .cpu()
-                        .numpy(),
+                    label_scores_chart = chart,
                     gold=None,
                     label_vocab=self.label_vocab,
                     is_train=False,
@@ -1287,6 +1293,7 @@ class NKChartParser(nn.Module):
         env = torch.no_grad if span_index is None else torch.enable_grad
         with env():
             for i, (start, end) in enumerate(zip(fp_startpoints, fp_endpoints)):
+                # get chart score here
                 chart = self.label_scores_from_annotations(
                     fencepost_annotations_start[start:end,:],
                     fencepost_annotations_end[start:end,:],
@@ -1296,6 +1303,7 @@ class NKChartParser(nn.Module):
                 ) if span_index is not None else None
                 #import pdb; pdb.set_trace()
                 # TODO: FIX BACKPROP THROUGH CHART
+                # get viterbi tree and gold tree span indices
                 p_i, p_j, p_label, p_augment, g_i, g_j, g_label = self.parse_from_annotations(
                     fencepost_annotations_start[start:end,:],
                     fencepost_annotations_end[start:end,:],
@@ -1313,6 +1321,7 @@ class NKChartParser(nn.Module):
                 glabels.append(g_label)
 
                 if chart is not None:
+                    # store everything here for calculating scores later
                     charts.append(chart)
                     jc_pis.append(p_i)
                     jc_pjs.append(p_j)

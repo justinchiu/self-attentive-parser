@@ -48,7 +48,8 @@ def search_index_pytorch(index, x, k, D=None, I=None):
     index.search_c(n, xptr,
                    k, Dptr, Iptr)
     torch.cuda.synchronize()
-    return D, I
+    return I, D
+
 
 def update_chart(chart, labels, distances):
     np.add.at(chart, labels, distances)
@@ -162,6 +163,7 @@ class AnnoyIndex:
         return labels, distances
 
     def topk(self, keys, k, label_only=True):
+        # doesn't work yet, untested
         labels, distances = list(zip(*[self._topk(key, k, label_only) for key in keys]))
         assert label_only
         labels = np.array(labels)
@@ -244,15 +246,17 @@ class FaissIndex:
         #   ]
         #   for each index
         # ]
-        labels = torch.LongTensor([
+        #labels = torch.LongTensor([
+        labels = np.array([
             [
                 [
                     self.raw_span_infos[index][idx].label_idx
                     for idx in idxs
                 ] for idxs in idxss.tolist()
             ] for index, (distss, idxss)in enumerate(distance_and_idxs)
-        ])
-        distances = torch.Tensor([
+        ], dtype=np.int32)
+        #distances = torch.Tensor([
+        distances = np.array([
             distss for distss, _ in distance_and_idxs
         ])
         # only return label, return span_info later?
