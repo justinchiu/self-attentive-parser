@@ -1174,7 +1174,6 @@ class NKChartParser(nn.Module):
                 queries = span_features[left, right]
                 # for now
                 labels, distances = span_index.topk(queries, k)
-
                 # numpy version
                 chart = np.zeros((T+1, T+1, len(self.label_vocab.values)), dtype=np.float32)
                 for le, ri, l, d in zip(
@@ -1206,7 +1205,7 @@ class NKChartParser(nn.Module):
                 # ADD SWITCH FOR THIS AS WELL
                 #label_scores_chart *= self.label_weights.cpu().numpy()
                 if zero_empty:
-                    label_scores_chart[:,:,0] = 0
+                    chart[:,:,0] = 0
                 decoder_args = dict(
                     sentence_len=T,
                     label_scores_chart = chart,

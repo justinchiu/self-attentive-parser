@@ -89,14 +89,21 @@ def init_annoy(dim, metric, num_indices):
 
 
 # Constructor for faiss indices
-def init_faiss(dim, metric, num_indices, pca=False):
+def init_faiss(dim, metric, num_indices, pca=False, in_dim=2000):
     nlist = 100
-    quantizer = faiss.IndexFlatIP(dim)
-    index = faiss.IndexIVFFlat(quantizer, dim, nlist)
-    constring = f"PCA{dim},IVF{nlist},Flat" if pca else f"IVF{nlist},Flat"
+    def make_index():
+        quantizer = faiss.IndexFlatIP(dim)
+        index = faiss.IndexIVFFlat(quantizer, dim, nlist)
+        if pca:
+            # No idea what eigen_power: float or random_rotation: bool arguments of PCAMatrix do
+            pca_matrix = faiss.PCAMatrix(in_dim, dim)
+            index = faiss.IndexPreTransform(pca_matrix, index)
+        return index
+    #constring = f"PCA{dim},IVF{nlist},Flat" if pca else f"IVF{nlist},Flat"
     metric = faiss.METRIC_INNER_PRODUCT if metric == "dot" else faiss.METRIC_L2
     return (
-        [faiss.index_factory(dim, constring, metric) for _ in range(num_indices)],
+        #[faiss.index_factory(dim, constring, metric) for _ in range(num_indices)],
+        [make_index() for _ in range(num_indices)],
         [[] for _ in range(num_indices)],
     )
 
@@ -166,8 +173,8 @@ class AnnoyIndex:
         # doesn't work yet, untested
         labels, distances = list(zip(*[self._topk(key, k, label_only) for key in keys]))
         assert label_only
-        labels = np.array(labels)
-        distances = np.array(distances)
+        labels = np.stack(labels, 1)
+        distances = np.stack(distances, 1)
         return labels, distances
 
     def build(self, n_trees=16):
@@ -252,7 +259,7 @@ class FaissIndex:
                 [
                     self.raw_span_infos[index][idx].label_idx
                     for idx in idxs
-                ] for idxs in idxss.tolist()
+                ] for idxs in idxss#.tolist()
             ] for index, (distss, idxss)in enumerate(distance_and_idxs)
         ], dtype=np.int32)
         #distances = torch.Tensor([

@@ -17,6 +17,11 @@ faiss_index = index.FaissIndex()
 
 annoy_index.load(prefix)
 print("loaded annoy")
+prefix = index.get_index_prefix(
+    index_base_path = index_path,
+    full_model_path = model_base_path,
+    nn_prefix = "all_spans_empty_test",
+)
 faiss_index.load(prefix)
 print("loaded faiss")
 
@@ -43,21 +48,52 @@ left_np = indices_np[:,0]
 right_np = indices_np[:,1]
 
 ### TOPK TESTS
-import timeit
 
 # cpu test
-def annoy_cpu():
+## numpy
+def annoy_np():
+    c = chart_np.copy()
     r = reps_np[left_np, right_np]
     labels, distances = annoy_index.topk(r, 8)
-    for le, ri, l, d in zip(): 
+    for le, ri, l, d in zip(
+        left_np, right_np,
+        labels[0], distances[0],
+    ):
+        np.logaddexp.at(c[le, ri], l, d)
+    return c, labels, distances
 
-## numpy
-
-
+def faiss_np():
+    c = chart_np.copy()
+    r = reps_np[left_np, right_np]
+    labels, distances = faiss_index.topk(r, 8)
+    for le, ri, l, d in zip(
+        left_np, right_np,
+        labels[0], distances[0],
+    ):
+        np.logaddexp.at(c[le, ri], l, d)
+    return c, labels, distances
 
 ## torch
-
-
+def faiss():
+    c = chart.clone()
+    r = reps[left, right]
 
 # gpu test
-# just torch
+
+
+# correctness
+ca, la, da = annoy_np()
+cf, lf, df = faiss_np()
+#import pdb; pdb.set_trace()
+# They're different!
+
+import time
+def get_time(f, K=5):
+    t = time.time()
+    _ = [f() for _ in range(K)]
+    return (time.time() - t)
+
+print(get_time(annoy_np))
+print(get_time(faiss_np))
+
+import pdb; pdb.set_trace()

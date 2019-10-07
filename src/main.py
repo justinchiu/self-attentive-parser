@@ -722,6 +722,7 @@ def run_index(args):
     else:
         for rep, info in zip(span_reps, span_infos):
             span_index.add_item(rep, info)
+        span_index.build()
 
     #span_index.build()
     prefix = index.get_index_prefix(
