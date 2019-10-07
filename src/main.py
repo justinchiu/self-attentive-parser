@@ -96,6 +96,7 @@ def make_hparams():
         batch_cky=False,
         label_weights=False,
         no_mlp=False,
+        use_label_weights=False,
 
         # Integration strategy of retrieved labels
         # - soft mixes in representation space
@@ -224,6 +225,10 @@ def run_train(args, hparams):
             char_vocab,
             hparams,
         )
+    if args.use_label_weights:
+        # override loaded model
+        parser.use_label_weights = args.use_label_weights
+        print(f"Overriding use_label_weights: {args.use_label_weights}")
 
     span_index, K = None, None
     if args.use_neighbours:
@@ -758,6 +763,7 @@ def main():
     subparser.add_argument("--print-vocabs", action="store_true")
     subparser.add_argument("--zero-empty", action="store_true")
 
+    subparser.add_argument("--use-label-weights", action="store_true", help="override")
     subparser.add_argument("--label-weights-only", action="store_true")
     subparser.add_argument("--use-neighbours", action="store_true")
     subparser.add_argument("--library", default="faiss", choices=["faiss", "annoy"])

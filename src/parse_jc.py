@@ -760,6 +760,7 @@ class NKChartParser(nn.Module):
 
         self.random_proj = nn.Linear(hparams.d_model, hparams.d_label_hidden)
         self.random_proj.weight.requires_grad = False
+        self.use_label_weights = hparams.use_label_weights if hasattr(hparams, "use_label_weights") else False
         self.no_mlp = hparams.no_mlp if hasattr(hparams, "no_mlp") else False
 
         self.f_rep = nn.Sequential(
@@ -1202,8 +1203,9 @@ class NKChartParser(nn.Module):
                     .cpu()
                     .numpy()
                 """
-                # ADD SWITCH FOR THIS AS WELL
-                #label_scores_chart *= self.label_weights.cpu().numpy()
+                # ADD SWITCH FOR THIS AS WELL (only use if trained!)
+                if self.use_label_weights:
+                    label_scores_chart *= self.label_weights.cpu().numpy()
                 if zero_empty:
                     chart[:,:,0] = 0
                 decoder_args = dict(
@@ -1405,43 +1407,32 @@ class NKChartParser(nn.Module):
             # loop over chart
             # just to be consistent
             T = fencepost_annotations_end.shape[0] - 1
+            span_reps_np = span_reps.cpu().numpy()
             label_scores_chart = np.zeros(
                 (T+1, T+1, len(self.label_vocab.values)),
                 dtype = np.float32,
             )
-            """
-            chart = torch.zeros(
-                (T+1, T+1, len(self.label_vocab.values)),
-                dtype = torch.float32,
-            )
-            """
-            for length in range(1, T+1):
-                for left in range(0, T+1-length):
-                    right = left + length
-                    rep = span_reps[left, right]
-                    # num_indices x k
-                    labels, distances = span_index.topk(rep, k)
-                    # use all of top k
-                    label_scores_chart[left,right][np.concatenate(labels)] = float("-inf")
-                    #import pdb; pdb.set_trace()
-                    np.logaddexp.at(
-                    #np.add.at(
-                        label_scores_chart[left,right],
-                        np.concatenate(labels),
-                        np.concatenate(distances),
-                    )
-                    """
-                    # Check if other neighbours are empty when top label is not empty
-                    num0 = np.equal(0, labels).sum()
-                    if labels[0,0] != 0 and num0 > 4:
-                        print(f"{num0} / 8")
-                        #import pdb; pdb.set_trace()
-                        pass
-                    """
+            indices = np.array([
+                (left, left+length)
+                for length in range(1, T+1)
+                for left in range(0, T+1-length)
+            ], dtype=np.int32)
+            left = indices[:,0]
+            right = indices[:,1]
+            flat_indices = left * (T+1) + right
+            queries = span_reps_np[left, right]
+            # for now
+            labels, distances = span_index.topk(queries, k)
+            # numpy version
+            for le, ri, l, d in zip(
+                left, right,
+                labels[0], distances[0],
+            ):
+                np.logaddexp.at(label_scores_chart[le, ri], l, d)
             if zero_empty:
                 label_scores_chart[:,:,0] = 0
             chart = torch.FloatTensor(label_scores_chart).to(fencepost_annotations_end.device)
-            return chart * self.label_weights
+            return chart * self.label_weights if self.use_label_weights else chart
 
         # if no span_index, proceed as normal
         label_scores_chart = self.label_proj(span_reps)

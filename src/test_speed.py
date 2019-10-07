@@ -77,6 +77,7 @@ def faiss_np():
 def faiss():
     c = chart.clone()
     r = reps[left, right]
+    labels, distances = torch_index.topk(r, 8)
 
 # gpu test
 
