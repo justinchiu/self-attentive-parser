@@ -225,10 +225,14 @@ def run_train(args, hparams):
             char_vocab,
             hparams,
         )
-    if args.use_label_weights:
+    if args.override_use_label_weights:
         # override loaded model
-        parser.use_label_weights = args.use_label_weights
-        print(f"Overriding use_label_weights: {args.use_label_weights}")
+        parser.use_label_weights = args.override_use_label_weights
+        print(f"Overriding use_label_weights: {args.override_use_label_weights}")
+        parser.no_relu = args.no_relu
+        if args.no_relu:
+            parser.remove_relu()
+            print("Removing ReLU from chart MLP")
 
     span_index, K = None, None
     if args.use_neighbours:
@@ -451,6 +455,11 @@ def run_test(args):
         )
         span_index.load(prefix)
 
+        # also remove relu
+        parser.no_relu = args.no_relu
+        if args.no_relu:
+            parser.remove_relu()
+
     test_predicted = []
     for start_index in range(0, len(test_treebank), args.eval_batch_size):
         subbatch_trees = test_treebank[start_index:start_index+args.eval_batch_size]
@@ -662,6 +671,9 @@ def run_index(args):
     assert 'hparams' in info['spec'], "Older savefiles not supported"
     parser = parse_jc.NKChartParser.from_spec(info['spec'], info['state_dict'])
     parser.no_mlp = args.no_mlp
+    parser.no_relu = args.no_relu
+    if args.no_relu:
+        parser.remove_relu()
 
     print("Getting labelled span representations")
     start_time = time.time()
@@ -763,7 +775,9 @@ def main():
     subparser.add_argument("--print-vocabs", action="store_true")
     subparser.add_argument("--zero-empty", action="store_true")
 
-    subparser.add_argument("--use-label-weights", action="store_true", help="override")
+    subparser.add_argument("--override-use-label-weights", action="store_true", help="override")
+    subparser.add_argument("--no-relu", action="store_true",
+        help="remove relu from chart mlp")
     subparser.add_argument("--label-weights-only", action="store_true")
     subparser.add_argument("--use-neighbours", action="store_true")
     subparser.add_argument("--library", default="faiss", choices=["faiss", "annoy"])
@@ -787,6 +801,8 @@ def main():
     subparser.add_argument("--label-index", action="store_true")
     subparser.add_argument("--k", type=int, default=8)
     subparser.add_argument("--zero-empty", action="store_true")
+    subparser.add_argument("--no-relu", action="store_true",
+        help="remove relu from chart mlp")
 
     subparser = subparsers.add_parser("ensemble")
     subparser.set_defaults(callback=run_ensemble)
@@ -823,6 +839,8 @@ def main():
     subparser.add_argument("--ignore-empty", action="store_true")
     subparser.add_argument("--no-mlp", action="store_true",
         help="Use random projection instead of chart MLP")
+    subparser.add_argument("--no-relu", action="store_true",
+        help="remove relu from chart mlp")
     subparser.add_argument("--pca", action="store_true",
         help="Perform PCA on span reps for dim red")
 

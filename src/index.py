@@ -48,12 +48,36 @@ def search_index_pytorch(index, x, k, D=None, I=None):
     index.search_c(n, xptr,
                    k, Dptr, Iptr)
     torch.cuda.synchronize()
-    return I, D
+    return D, I
 
 
-def update_chart(chart, labels, distances):
-    np.add.at(chart, labels, distances)
-    chart[:,:,0] = 0
+def update_chart(chart, labels, distances, left, right):
+    for le, ri, l, d in zip(
+        left, right,
+        labels[0], distances[0],
+    ):
+        np.logaddexp.at(chart[le, ri], l, d)
+
+def update_chart_torch(chart, labels, distances, left, right):
+    # only one index right now
+    cells = scatter.scatter_lse(
+        distances[0],
+        labels[0],
+        dim = -1,
+        dim_size = len(self.label_vocab.values),
+        fill_value = 0,
+    )
+    flat_chart = torch.zeros((T+1) * (T+1), len(self.label_vocab.values))
+    flat_chart = flat_chart.scatter(
+        0,
+        flat_indices.unsqueeze(-1).expand_as(cells),
+        cells,
+    )
+    chart = (flat_chart
+        .view(T+1, T+1, flat_chart.shape[-1])
+        .cpu()
+        .numpy()
+    )
 
 
 def get_index_prefix(index_base_path, full_model_path, nn_prefix):
@@ -269,6 +293,68 @@ class FaissIndex:
         # only return label, return span_info later?
         return labels, distances
 
+    def topk_torch(self, keys, k, label_only=True):
+        distance_and_idxs = [
+            search_index_pytorch(index, keys, k)
+            for index in self.raw_indices
+        ]
+        # distance_and_idxs: [
+        #   [
+        #       (
+        #           # distance
+        #           nq x k, float32
+        #           # idx
+        #           nq x k, int64
+        #       )
+        #   ]
+        #   for each index
+        # ]
+        #import pdb; pdb.set_trace()
+        labels = torch.LongTensor([
+            [
+                [
+                    self.raw_span_infos[index][idx].label_idx
+                    for idx in idxs
+                ] for idxs in idxss.tolist()
+            ] for index, (distss, idxss)in enumerate(distance_and_idxs)
+        ], device=keys.device)
+        distances = torch.stack([
+            distss for distss, _ in distance_and_idxs
+        ], 0)
+        # only return label, return span_info later?
+        return labels, distances
+
+    def topk_torch_np(self, keys, k, label_only=True):
+        distance_and_idxs = [
+            [x.cpu().numpy() for x in search_index_pytorch(index, keys, k)]
+            for index in self.raw_indices
+        ]
+        # distance_and_idxs: [
+        #   [
+        #       (
+        #           # distance
+        #           nq x k, float32
+        #           # idx
+        #           nq x k, int64
+        #       )
+        #   ]
+        #   for each index
+        # ]
+        labels = np.array([
+            [
+                [
+                    self.raw_span_infos[index][idx].label_idx
+                    for idx in idxs
+                ] for idxs in idxss#.tolist()
+            ] for index, (distss, idxss)in enumerate(distance_and_idxs)
+        ], dtype=np.int32)
+        distances = np.array([
+            distss for distss, _ in distance_and_idxs
+        ])
+        # only return label, return span_info later?
+        return labels, distances
+
+
     def build(self):
         pass
 
@@ -295,3 +381,11 @@ class FaissIndex:
             faiss.write_index(t, str(ann_name))
             pickle.dump(span_info, open(info_name, "wb"))
 
+    def to(self, device):
+        if isinstance(device, torch.device):
+            device = device.index
+        res = faiss.StandardGpuResources()
+        self.raw_indices = [
+            faiss.index_cpu_to_gpu(res, device, x)
+            for x in self.raw_indices
+        ]

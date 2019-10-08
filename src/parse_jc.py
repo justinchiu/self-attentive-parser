@@ -762,6 +762,7 @@ class NKChartParser(nn.Module):
         self.random_proj.weight.requires_grad = False
         self.use_label_weights = hparams.use_label_weights if hasattr(hparams, "use_label_weights") else False
         self.no_mlp = hparams.no_mlp if hasattr(hparams, "no_mlp") else False
+        self.no_relu = False
 
         self.f_rep = nn.Sequential(
             nn.Linear(hparams.d_model, hparams.d_label_hidden),
@@ -792,6 +793,13 @@ class NKChartParser(nn.Module):
 
         if use_cuda:
             self.cuda()
+
+    def remove_relu(self):
+        self.f_rep = nn.Sequential(*list(self.f_rep.children())[:-1])
+
+    def add_relu(self):
+        self.f_rep = nn.Sequential(*(
+            list(self.f_rep.children()) + [nn.ReLU()]))
 
     @property
     def model(self):
@@ -1205,7 +1213,7 @@ class NKChartParser(nn.Module):
                 """
                 # ADD SWITCH FOR THIS AS WELL (only use if trained!)
                 if self.use_label_weights:
-                    label_scores_chart *= self.label_weights.cpu().numpy()
+                    chart *= self.label_weights.cpu().numpy()
                 if zero_empty:
                     chart[:,:,0] = 0
                 decoder_args = dict(
