@@ -61,7 +61,8 @@ print(cpu_index)
 #test_time(cpu_index, xb, xq, K, eD, eI)
 #cpu_index.nprobe = 10
 #test_time(cpu_index, xb, xq, K, eD, eI)
-cpu_index.nprobe = 100
+#cpu_index.nprobe = 100
+cpu_index.nprobe = 50
 test_time(cpu_index, xb, xq, K, eD, eI)
 print(cpu_index_l2)
 test_time(cpu_index_l2, xb, xq, K, eD, eI)
@@ -69,3 +70,4 @@ test_time(cpu_index_l2, xb, xq, K, eD, eI)
 #test_time(index, xb, xq, K, eD, eI)
 print(index_gpu)
 test_time(index_gpu, xb, xq, K, eD, eI)
+

@@ -764,6 +764,8 @@ class NKChartParser(nn.Module):
         self.no_mlp = hparams.no_mlp if hasattr(hparams, "no_mlp") else False
         self.no_relu = False
 
+        self.metric = hparams.metric
+
         self.f_rep = nn.Sequential(
             nn.Linear(hparams.d_model, hparams.d_label_hidden),
             LayerNormalization(hparams.d_label_hidden),
@@ -800,6 +802,13 @@ class NKChartParser(nn.Module):
     def add_relu(self):
         self.f_rep = nn.Sequential(*(
             list(self.f_rep.children()) + [nn.ReLU()]))
+
+    def l2(self, x):
+        d = x.dim() - 1
+        y = self.label_proj.weight
+        x = x.unsqueeze(-2)
+        y = y.view(*([1] * d + list(y.shape)))
+        return (x - y).norm(dim=-1)
 
     @property
     def model(self):
@@ -1373,6 +1382,7 @@ class NKChartParser(nn.Module):
                 pscore += sum(chart[x] for x in zip(pi, pj, pl))
                 gscore += sum(chart[x] for x in zip(gi, gj, gl))
             loss = pscore - gscore + paugment_total
+            import pdb; pdb.set_trace()
             #print(self.label_weights)
             return None, loss
 
@@ -1380,14 +1390,20 @@ class NKChartParser(nn.Module):
         cells_j = from_numpy(np.concatenate(pjs + gjs))
         cells_label = from_numpy(np.concatenate(plabels + glabels))
 
-        cells_label_scores = self.label_proj(self.f_rep(
+        cells_rep = self.f_rep(
             fencepost_annotations_end[cells_j] - fencepost_annotations_start[cells_i]
-        ))
+        )
+        cells_label_scores = (self.label_proj(cells_rep)
+            if self.metric == "dot" else
+            -self.l2(cells_rep)
+        )
+
         if self.zero_empty:
             cells_label_scores = torch.cat([
                 cells_label_scores.new_zeros((cells_label_scores.size(0), 1)),
                 cells_label_scores
             ], 1)
+
         cells_scores = torch.gather(cells_label_scores, 1, cells_label[:, None])
         loss = cells_scores[:num_p].sum() - cells_scores[num_p:].sum() + paugment_total
 
@@ -1440,10 +1456,15 @@ class NKChartParser(nn.Module):
             if zero_empty:
                 label_scores_chart[:,:,0] = 0
             chart = torch.FloatTensor(label_scores_chart).to(fencepost_annotations_end.device)
+            import pdb; pdb.set_trace()
             return chart * self.label_weights if self.use_label_weights else chart
 
         # if no span_index, proceed as normal
-        label_scores_chart = self.label_proj(span_reps)
+        #label_scores_chart = self.label_proj(span_reps)
+        label_scores_chart = (self.label_proj(span_reps)
+            if self.metric == "dot" else
+            -self.l2(span_reps)
+        )
         if self.zero_empty:
             label_scores_chart = torch.cat([
                 label_scores_chart.new_zeros(

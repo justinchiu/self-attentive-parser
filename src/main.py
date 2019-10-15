@@ -91,7 +91,9 @@ def make_hparams():
         bert_do_lower_case=True,
         bert_transliterate="",
 
-        zero_empty=True,
+        zero_empty=False,
+
+        metric="dot",
 
         batch_cky=False,
         label_weights=False,
@@ -225,14 +227,14 @@ def run_train(args, hparams):
             char_vocab,
             hparams,
         )
+    parser.no_relu = args.no_relu
+    if args.no_relu:
+        parser.remove_relu()
+        print("Removing ReLU from chart MLP")
     if args.override_use_label_weights:
         # override loaded model
         parser.use_label_weights = args.override_use_label_weights
         print(f"Overriding use_label_weights: {args.override_use_label_weights}")
-        parser.no_relu = args.no_relu
-        if args.no_relu:
-            parser.remove_relu()
-            print("Removing ReLU from chart MLP")
 
     span_index, K = None, None
     if args.use_neighbours:
@@ -243,9 +245,14 @@ def run_train(args, hparams):
             library = args.library,
         )
         """
-        span_index = index.AnnoyIndex(
+        index_const = (
+            index.FaissIndex if args.library == "faiss" else index.AnnoyIndex
+        )
+        # assert index loaded has the same metric
+        span_index = index_const(
             num_indices = len(parser.label_vocab.values)
                 if args.label_index else 1,
+            metric = args.metric,
         )
         prefix = index.get_index_prefix(
             index_base_path = args.index_path,
@@ -773,7 +780,6 @@ def main():
     subparser.add_argument("--epochs", type=int)
     subparser.add_argument("--checks-per-epoch", type=int, default=4)
     subparser.add_argument("--print-vocabs", action="store_true")
-    subparser.add_argument("--zero-empty", action="store_true")
 
     subparser.add_argument("--override-use-label-weights", action="store_true", help="override")
     subparser.add_argument("--no-relu", action="store_true",
@@ -833,6 +839,7 @@ def main():
     subparser.add_argument("--batch-size", type=int, default=256)
     subparser.add_argument("--subbatch-max-tokens", type=int, default=2000)
     subparser.add_argument("--library", default="faiss", choices=["faiss", "annoy"])
+    subparser.add_argument("--metric", default="dot", choices=["dot", "l2"])
     subparser.add_argument("--index-path", default="index")
     subparser.add_argument("--nn-prefix", default="all_spans", required=True)
     subparser.add_argument("--label-index", action="store_true")

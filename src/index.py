@@ -124,10 +124,15 @@ def init_faiss(dim, metric, num_indices, pca=False, in_dim=2000):
             index = faiss.IndexPreTransform(pca_matrix, index)
         return index
     #constring = f"PCA{dim},IVF{nlist},Flat" if pca else f"IVF{nlist},Flat"
-    metric = faiss.METRIC_INNER_PRODUCT if metric == "dot" else faiss.METRIC_L2
+    constring = f"IVF4096,PQ32"
+    metric_map = {
+        "dot": faiss.METRIC_INNER_PRODUCT,
+        "l2": faiss.METRIC_L2
+    }
+    f_metric = metric_map[metric]
     return (
-        #[faiss.index_factory(dim, constring, metric) for _ in range(num_indices)],
-        [make_index() for _ in range(num_indices)],
+        [faiss.index_factory(dim, constring, f_metric) for _ in range(num_indices)],
+        #[make_index() for _ in range(num_indices)],
         [[] for _ in range(num_indices)],
     )
 
