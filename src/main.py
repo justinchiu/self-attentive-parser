@@ -252,7 +252,7 @@ def run_train(args, hparams):
         span_index = index_const(
             num_indices = len(parser.label_vocab.values)
                 if args.label_index else 1,
-            metric = args.metric,
+            metric = parser.metric,
         )
         prefix = index.get_index_prefix(
             index_base_path = args.index_path,
@@ -454,6 +454,7 @@ def run_test(args):
         span_index = index_const(
             num_indices = len(parser.label_vocab.values)
                 if args.label_index else 1,
+            metric = parser.metric,
         )
         prefix = index.get_index_prefix(
             index_base_path = args.index_path,
@@ -696,9 +697,9 @@ def run_index(args):
     )
     """
     span_index = (
-        index.FaissIndex(num_indices=num_labels)
+        index.FaissIndex(num_indices=num_labels, metric=parser.metric)
         if args.library == "faiss"
-        else index.AnnoyIndex(num_indices=num_labels)
+        else index.AnnoyIndex(num_indices=num_labels, metric=parser.metric)
     )
 
 
@@ -839,7 +840,6 @@ def main():
     subparser.add_argument("--batch-size", type=int, default=256)
     subparser.add_argument("--subbatch-max-tokens", type=int, default=2000)
     subparser.add_argument("--library", default="faiss", choices=["faiss", "annoy"])
-    subparser.add_argument("--metric", default="dot", choices=["dot", "l2"])
     subparser.add_argument("--index-path", default="index")
     subparser.add_argument("--nn-prefix", default="all_spans", required=True)
     subparser.add_argument("--label-index", action="store_true")

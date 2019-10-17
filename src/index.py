@@ -104,6 +104,7 @@ def get_index_paths(prefix, num_indices, library):
 
 # Constructor for annoy indices
 def init_annoy(dim, metric, num_indices):
+    metric = "euclidean" if metric == "l2" else metric
     return (
         # index
         [annoy.AnnoyIndex(dim, metric=metric) for _ in range(num_indices)],
@@ -125,6 +126,7 @@ def init_faiss(dim, metric, num_indices, pca=False, in_dim=2000):
         return index
     #constring = f"PCA{dim},IVF{nlist},Flat" if pca else f"IVF{nlist},Flat"
     constring = f"IVF4096,PQ32"
+    #constring = f"IVF262144_HNSW32,PQ32"
     metric_map = {
         "dot": faiss.METRIC_INNER_PRODUCT,
         "l2": faiss.METRIC_L2
@@ -152,7 +154,7 @@ class SpanInfo(NamedTuple):
 class AnnoyIndex:
     def __init__(
         self,
-        dim = 250,
+        dim = 256,
         metric = "dot",
         num_indices = 1,
         prefix = None,
@@ -237,7 +239,7 @@ class AnnoyIndex:
 class FaissIndex:
     def __init__(
         self,
-        dim = 250,
+        dim = 256,
         metric = "dot",
         num_indices = 1,
         prefix = None,
@@ -322,7 +324,7 @@ class FaissIndex:
                     for idx in idxs
                 ] for idxs in idxss.tolist()
             ] for index, (distss, idxss)in enumerate(distance_and_idxs)
-        ], device=keys.device)
+        ]).to(keys.device)
         distances = torch.stack([
             distss for distss, _ in distance_and_idxs
         ], 0)
