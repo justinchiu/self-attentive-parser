@@ -238,20 +238,12 @@ def run_train(args, hparams):
 
     span_index, K = None, None
     if args.use_neighbours:
-        """
-        span_index = index.SpanIndex(
-            num_indices = len(parser.label_vocab.values)
-                if args.label_index else 1,
-            library = args.library,
-        )
-        """
         index_const = (
             index.FaissIndex if args.library == "faiss" else index.AnnoyIndex
         )
         # assert index loaded has the same metric
         span_index = index_const(
-            num_indices = len(parser.label_vocab.values)
-                if args.label_index else 1,
+            num_labels = len(parser.label_vocab.values),
             metric = parser.metric,
         )
         prefix = index.get_index_prefix(
@@ -262,6 +254,12 @@ def run_train(args, hparams):
         span_index.load(prefix)
         K = args.k
         assert K > 0
+        if parse_jc.use_cuda:
+            # hack!
+            # use CUDA_VISIBLE_DEVICES={0},{1}
+            print(f"Using gpu {args.index_devid} for index")
+            span_index.to(args.index_devid)
+            #pass
 
     if args.label_weights_only:
         # freeze everything except "label_weights"
@@ -327,6 +325,7 @@ def run_train(args, hparams):
                 span_index = span_index,
                 k = K,
                 zero_empty = parser.zero_empty,
+                train_nn = args.train_through_nn,
             )
             del _
             dev_predicted.extend([p.convert() for p in predicted])
@@ -426,6 +425,9 @@ def run_train(args, hparams):
             if current_processed >= check_every:
                 current_processed -= check_every
                 check_dev()
+                if span_index is not None:
+                    # recompute span_index
+                    pass
 
         # adjust learning rate at the end of an epoch
         if (total_processed // args.batch_size + 1) > hparams.learning_rate_warmup_steps:
@@ -452,8 +454,7 @@ def run_test(args):
     if args.use_neighbours:
         index_const = index.FaissIndex if args.library == "faiss" else index.AnnoyIndex
         span_index = index_const(
-            num_indices = len(parser.label_vocab.values)
-                if args.label_index else 1,
+            num_labels = len(parser.label_vocab.values),
             metric = parser.metric,
         )
         prefix = index.get_index_prefix(
@@ -686,9 +687,7 @@ def run_index(args):
     print("Getting labelled span representations")
     start_time = time.time()
 
-    # Per label index
-    use_label_index = args.label_index
-    num_labels = len(parser.label_vocab.values) if use_label_index else 1
+    num_labels = len(parser.label_vocab.values)
 
     """
     span_index = index.SpanIndex(
@@ -697,59 +696,34 @@ def run_index(args):
     )
     """
     span_index = (
-        index.FaissIndex(num_indices=num_labels, metric=parser.metric)
+        index.FaissIndex(num_labels=num_labels, metric=parser.metric)
         if args.library == "faiss"
         else index.AnnoyIndex(num_indices=num_labels, metric=parser.metric)
     )
 
-
-    # aggregate indices and reps
-    span_reps = []
-    span_infos = []
-    for start_index in range(0, len(train_treebank), args.batch_size):
-        subbatch_trees = train_treebank[start_index:start_index+args.batch_size]
-        subbatch_sentences = [
-            [(leaf.tag, leaf.word) for leaf in tree.leaves()]
-            for tree in subbatch_trees
-        ]
-        span_representations = parser.parse_batch(
-            subbatch_sentences,
-            return_span_representations = True,
-        )
-        for sub_index, (tree, chart) in enumerate(zip(subbatch_trees, span_representations)):
-            train_index = start_index + sub_index
-            chart = chart.cpu().numpy()
-            # tree.leaves(): T
-            # chart: T+1 x T+1 x H (span reps)
-            T = len(list(tree.leaves()))
-            parse = tree.convert()
-            for length in range(1, T+1):
-                for left in range(0, T+1-length):
-                    right = left + length
-                    label = parse.oracle_label(left, right)
-                    label_idx = parser.label_vocab.index(label)
-                    if label_idx != 0 or not args.ignore_empty:
-                        span_rep = chart[left, right]
-                        span_info = index.SpanInfo(
-                            label_idx = label_idx,
-                            label = label,
-                            sen_idx = train_index,
-                            left = left,
-                            right = right,
-                        )
-                        span_reps.append(span_rep)
-                        span_infos.append(span_info)
+    rep_time = time.time()
+    span_reps, span_infos = index.get_span_reps_infos(parser, train_treebank, args.batch_size)
+    print(f"rep-time: {format_elapsed(rep_time)}")
     # clean up later, refactor back into index.py
+    build_time = time.time()
+    use_gpu = True
+    print(f"Using gpu: {use_gpu}")
     if args.library == "faiss":
-        span_index.raw_indices[0].train(np.stack(span_reps))
-        span_index.raw_indices[0].add(np.stack(span_reps))
-        span_index.raw_span_infos[0] = span_infos
+        if use_gpu:
+            span_index.to(0)
+        span_index.add(span_reps, span_infos)
+        span_index.build()
     else:
         for rep, info in zip(span_reps, span_infos):
             span_index.add_item(rep, info)
         span_index.build()
 
     #span_index.build()
+    print(f"build-time {format_elapsed(build_time)}")
+    if use_gpu:
+        span_index.to(-1)
+
+    save_time = time.time()
     prefix = index.get_index_prefix(
         index_base_path = args.index_path,
         full_model_path = args.model_path_base,
@@ -757,7 +731,7 @@ def run_index(args):
     )
     print(f"Saving index to {prefix}")
     span_index.save(prefix)
-    #span_index.raw_indices[0].get_nns_by_item(0, 10)
+    print(f"save-time {format_elapsed(save_time)}")
 
     print(f"index-elapsed {format_elapsed(start_time)}")
 
@@ -790,8 +764,10 @@ def main():
     subparser.add_argument("--library", default="faiss", choices=["faiss", "annoy"])
     subparser.add_argument("--index-path", default="index")
     subparser.add_argument("--nn-prefix", default="all_spans")
-    subparser.add_argument("--label-index", action="store_true")
     subparser.add_argument("--k", type=int, default=8)
+    subparser.add_argument("--train-through-nn", action="store_true",
+        help="train through nn")
+    subparser.add_argument("--index-devid", type=int, default=0)
 
     subparser = subparsers.add_parser("test")
     subparser.set_defaults(callback=run_test)
@@ -805,7 +781,6 @@ def main():
     subparser.add_argument("--library", default="faiss", choices=["faiss", "annoy"])
     subparser.add_argument("--index-path", default="index")
     subparser.add_argument("--nn-prefix", default="all_spans")
-    subparser.add_argument("--label-index", action="store_true")
     subparser.add_argument("--k", type=int, default=8)
     subparser.add_argument("--zero-empty", action="store_true")
     subparser.add_argument("--no-relu", action="store_true",
@@ -842,7 +817,6 @@ def main():
     subparser.add_argument("--library", default="faiss", choices=["faiss", "annoy"])
     subparser.add_argument("--index-path", default="index")
     subparser.add_argument("--nn-prefix", default="all_spans", required=True)
-    subparser.add_argument("--label-index", action="store_true")
     subparser.add_argument("--ignore-empty", action="store_true")
     subparser.add_argument("--no-mlp", action="store_true",
         help="Use random projection instead of chart MLP")

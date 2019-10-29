@@ -12,7 +12,7 @@ np.random.seed(1234)             # make reproducible
 K = 8
 draw = 1024
 d = 256
-nb = int(1e7)
+nb = int(5e5)
 nq = 64
 
 # setup
@@ -57,17 +57,42 @@ index = faiss.index_factory(d, "IVF4096,PQ32", faiss.METRIC_L2)
 res = faiss.StandardGpuResources()
 index_gpu = faiss.index_cpu_to_gpu(res, 3, index)
 
-print(cpu_index)
-#test_time(cpu_index, xb, xq, K, eD, eI)
-#cpu_index.nprobe = 10
-#test_time(cpu_index, xb, xq, K, eD, eI)
-#cpu_index.nprobe = 100
-cpu_index.nprobe = 50
-test_time(cpu_index, xb, xq, K, eD, eI)
-print(cpu_index_l2)
-test_time(cpu_index_l2, xb, xq, K, eD, eI)
-#print(index)
-#test_time(index, xb, xq, K, eD, eI)
-print(index_gpu)
-test_time(index_gpu, xb, xq, K, eD, eI)
+test_speed = False
+if test_speed:
+    print(cpu_index)
+    #test_time(cpu_index, xb, xq, K, eD, eI)
+    #cpu_index.nprobe = 10
+    #test_time(cpu_index, xb, xq, K, eD, eI)
+    #cpu_index.nprobe = 100
+    cpu_index.nprobe = 50
+    test_time(cpu_index, xb, xq, K, eD, eI)
+    print(cpu_index_l2)
+    test_time(cpu_index_l2, xb, xq, K, eD, eI)
+    #print(index)
+    #test_time(index, xb, xq, K, eD, eI)
+    print(index_gpu)
+    test_time(index_gpu, xb, xq, K, eD, eI)
 
+
+# test sharding
+# JK no sharding
+idxs = faiss.IndexShards(d)
+for i in range(100):
+    xb = np.random.random((nb // 2, d)).astype('float32')
+    xb[:, 0] += np.arange(xb.shape[0]) / 1000.
+    index = faiss.index_factory(d, "IVF4096,PQ32", faiss.METRIC_L2)
+    res = faiss.StandardGpuResources()
+    index_gpu = faiss.index_cpu_to_gpu(res, 3, index)
+    index_gpu.train(xb)
+    index_gpu.add(xb)
+    idxs.add_shard(index_gpu)
+
+xq = xb[:32]
+
+t = time.time()
+idxs.search(xq, K)
+print(f"{time.time()} - {t}")
+
+t = time.time()
+index_gpu.search(xq, K)
+print(f"{time.time()} - {t}")

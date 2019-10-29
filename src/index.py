@@ -9,6 +9,7 @@ from typing import NamedTuple
 import annoy
 import faiss
 import torch
+import scatter
 
 # copied from faiss/.../test_pytorch_faiss.py
 # ...no idea why there isn't built in support for torch
@@ -54,30 +55,30 @@ def search_index_pytorch(index, x, k, D=None, I=None):
 def update_chart(chart, labels, distances, left, right):
     for le, ri, l, d in zip(
         left, right,
-        labels[0], distances[0],
+        labels, distances,
     ):
         np.logaddexp.at(chart[le, ri], l, d)
 
-def update_chart_torch(chart, labels, distances, left, right):
+def chart_torch(T, N, labels, distances, flat_indices, chart_weight):
     # only one index right now
     cells = scatter.scatter_lse(
-        distances[0],
-        labels[0],
+        distances,
+        labels,
         dim = -1,
-        dim_size = len(self.label_vocab.values),
-        fill_value = 0,
+        dim_size = N,
+        fill_value = float("-inf"),
     )
-    flat_chart = torch.zeros((T+1) * (T+1), len(self.label_vocab.values))
+    flat_chart = torch.zeros((T+1) * (T+1), N, device=distances.device)
+    flat_chart.fill_(float("-inf"))
     flat_chart = flat_chart.scatter(
         0,
         flat_indices.unsqueeze(-1).expand_as(cells),
         cells,
     )
-    chart = (flat_chart
-        .view(T+1, T+1, flat_chart.shape[-1])
-        .cpu()
-        .numpy()
-    )
+    mask = flat_chart > float("-inf")
+    filler = chart_weight.to(flat_chart.device).expand_as(flat_chart).masked_fill(mask, float("-inf"))
+    flat_chart = torch.stack((flat_chart, filler), -1).logsumexp(-1)
+    return flat_chart.view(T+1, T+1, flat_chart.shape[-1])
 
 
 def get_index_prefix(index_base_path, full_model_path, nn_prefix):
@@ -92,29 +93,57 @@ def get_index_paths(prefix, num_indices, library):
     suffix = ".annoy" if library == "annoy" else ".faiss"
     nn_suffix = ".ann" + suffix
     info_suffix = ".info" + suffix
+    key_suffix = ".key" + suffix + ".npy"
+    label_suffix = ".label" + suffix + ".npy"
+    labelkey_suffix = ".label2key" + suffix + ".npy"
 
+    return (
+        prefix.with_suffix(nn_suffix),
+        prefix.with_suffix(info_suffix),
+        prefix.with_suffix(key_suffix),
+        prefix.with_suffix(label_suffix),
+        prefix.with_suffix(labelkey_suffix),
+    )
+
+    """
     if num_indices > 1:
         return (
             [prefix.with_suffix(f".{i}{nn_suffix}") for i in range(num_indices)],
             [prefix.with_suffix(f".{i}{info_suffix}") for i in range(num_indices)],
+            [prefix.with_suffix(f".{i}{key_suffix}") for i in range(num_indices)],
         )
     else:
-        return [prefix.with_suffix(nn_suffix)], [prefix.with_suffix(info_suffix)]
+        return (
+            [prefix.with_suffix(nn_suffix)],
+            [prefix.with_suffix(info_suffix)],
+            [prefix.with_suffix(key_suffix)],
+        )
+    """
 
 
 # Constructor for annoy indices
-def init_annoy(dim, metric, num_indices):
+def init_annoy(dim, metric, num_labels):
     metric = "euclidean" if metric == "l2" else metric
+    return (
+        # index
+        annoy.AnnoyIndex(dim, metric=metric),
+        # span info
+        [],
+        # label maps
+        [[] for _ in range(num_labels)],
+    )
+    """
     return (
         # index
         [annoy.AnnoyIndex(dim, metric=metric) for _ in range(num_indices)],
         # span info
         [[] for _ in range(num_indices)],
     )
+    """
 
 
 # Constructor for faiss indices
-def init_faiss(dim, metric, num_indices, pca=False, in_dim=2000):
+def init_faiss(dim, metric, num_labels, pca=False, in_dim=2000):
     nlist = 100
     def make_index():
         quantizer = faiss.IndexFlatIP(dim)
@@ -133,9 +162,16 @@ def init_faiss(dim, metric, num_indices, pca=False, in_dim=2000):
     }
     f_metric = metric_map[metric]
     return (
-        [faiss.index_factory(dim, constring, f_metric) for _ in range(num_indices)],
-        #[make_index() for _ in range(num_indices)],
-        [[] for _ in range(num_indices)],
+        # index
+        faiss.index_factory(dim, constring, f_metric),
+        # span_info
+        [],
+        # key
+        [],
+        # labels
+        [],
+        # label to key idxs
+        [[] for _ in range(num_labels)],
     )
 
 init_fns = {
@@ -187,6 +223,7 @@ class AnnoyIndex:
             index.get_nns_by_vector(key, k, include_distances=True)
             for index in self.raw_indices
         ]
+        """
         labels = np.array([
             [
                 self.raw_span_infos[index][idx].label_idx
@@ -197,6 +234,17 @@ class AnnoyIndex:
             [dist for idx, dist in zip(*idx_and_distance)]
             for idx_and_distance in idx_and_distances
         ])
+        """
+        labels = np.array([
+            self.raw_span_infos[index][idx].label_idx
+            for index, idx_and_distance in enumerate(idx_and_distances)
+            for idx, dist in zip(*idx_and_distance)
+        ])
+        distances = np.array([
+            dist
+            for idx_and_distance in idx_and_distances
+            for idx, dist in zip(*idx_and_distance)
+        ])
         # only return label, return span_info later?
         return labels, distances
 
@@ -204,9 +252,10 @@ class AnnoyIndex:
         # doesn't work yet, untested
         labels, distances = list(zip(*[self._topk(key, k, label_only) for key in keys]))
         assert label_only
-        labels = np.stack(labels, 1)
-        distances = np.stack(distances, 1)
-        return labels, distances
+        labels = np.stack(labels)
+        distances = np.stack(distances)
+        #import pdb; pdb.set_trace()
+        return labels, -distances if self.metric == "l2" else distances
 
     def build(self, n_trees=16):
         for t in self.raw_indices:
@@ -216,7 +265,7 @@ class AnnoyIndex:
         assert self.prefix or prefix, "One of self.prefix or prefix must not be None"
         prefix = self.prefix if prefix is None else prefix
 
-        ann_names, info_names = get_index_paths(prefix, self.num_indices, "annoy")
+        ann_names, info_names, _ = get_index_paths(prefix, self.num_indices, "annoy")
         for i, (t, ann_name, info_name) in enumerate(zip(
             self.raw_indices, ann_names, info_names,
         )):
@@ -227,7 +276,7 @@ class AnnoyIndex:
         assert self.prefix or prefix, "One of self.prefix or prefix must not be None"
         prefix = self.prefix if prefix is None else prefix
 
-        ann_names, info_names = get_index_paths(prefix, self.num_indices, "annoy")
+        ann_names, info_names, _ = get_index_paths(prefix, self.num_indices, "annoy")
         for t, span_info, ann_name, info_name in zip(
             self.raw_indices, self.raw_span_infos, ann_names, info_names,
         ):
@@ -241,158 +290,155 @@ class FaissIndex:
         self,
         dim = 256,
         metric = "dot",
-        num_indices = 1,
+        num_labels = 1,
         prefix = None,
         pca = False,
     ):
         self.dim = dim
         self.metric = metric
-        self.num_indices = num_indices
+        self.num_labels = num_labels
 
         # dispatch to respective constructor
-        self.raw_indices, self.raw_span_infos = init_faiss(
-            dim, metric, num_indices)
+        # NOTE: REMOVED LABEL INDEX
+        (
+            self.raw_index,
+            self.raw_span_infos,
+            self.keys,
+            self.labels,
+            self.label2keys,
+        ) = init_faiss(dim, metric, num_labels)
 
         # filepath prefix for saving and loading
         self.prefix = prefix
 
-    def add_item(self, key, value, index=0):
-        self.raw_indices[index].add(key)
-        self.raw_span_infos[index].append(value)
+        self.device = torch.device("cpu")
+
+    def add_item(self, key, value):
+        self.raw_index.add(key)
+        self.raw_span_infos.append(value)
+        self.keys.append(key)
+        idx = len(self.keys)
+        lbl = value.label_idx
+        self.labels.append(lbl)
+        self.label2keys[lbl].append(idx)
 
     def add(self, keys, values, index=0):
         # key is the vector
         # value is the info
-        self.raw_indices[index].add(keys)
-        self.raw_span_infos[index].extend(values)
+        self.raw_span_infos.extend(values)
+        # loop over keys and values to add to label2keys
+        for key, value in zip(keys, values):
+            self.keys.append(key)
+            idx = len(self.keys)
+            lbl = value.label_idx
+            self.labels.append(lbl)
+            self.label2keys[lbl].append(idx)
+
+    def build(self):
+        self.keys = np.stack(self.keys)
+
+        self.raw_index.train(self.keys)
+        self.raw_index.add(self.keys)
+
+        self.labels = np.array(self.labels)
+        self.label2keys = [np.array(xs) for xs in self.label2keys]
 
     # can mess with this later
     def topk(self, keys, k, label_only=True):
         # only labels for now
-        distance_and_idxs = [
-            index.search(keys, k)
-            for index in self.raw_indices
-        ]
-        # distance_and_idxs: [
-        #   [
-        #       (
-        #           # distance
-        #           nq x k, float32
-        #           # idx
-        #           nq x k, int64
-        #       )
-        #   ]
-        #   for each index
-        # ]
-        #labels = torch.LongTensor([
-        labels = np.array([
-            [
-                [
-                    self.raw_span_infos[index][idx].label_idx
-                    for idx in idxs
-                ] for idxs in idxss#.tolist()
-            ] for index, (distss, idxss)in enumerate(distance_and_idxs)
-        ], dtype=np.int32)
-        #distances = torch.Tensor([
-        distances = np.array([
-            distss for distss, _ in distance_and_idxs
-        ])
-        # only return label, return span_info later?
-        return labels, distances
+        # TODO: fix this! flatten along indices and batch all queries
+        D, I = self.raw_index.search(keys, k)
+        labels = self.labels[I]
+        nn_keys = self.keys[I]
+        return labels, -D if self.metric == "l2" else D, nn_keys
 
     def topk_torch(self, keys, k, label_only=True):
-        distance_and_idxs = [
-            search_index_pytorch(index, keys, k)
-            for index in self.raw_indices
-        ]
-        # distance_and_idxs: [
-        #   [
-        #       (
-        #           # distance
-        #           nq x k, float32
-        #           # idx
-        #           nq x k, int64
-        #       )
-        #   ]
-        #   for each index
-        # ]
-        #import pdb; pdb.set_trace()
-        labels = torch.LongTensor([
-            [
-                [
-                    self.raw_span_infos[index][idx].label_idx
-                    for idx in idxs
-                ] for idxs in idxss.tolist()
-            ] for index, (distss, idxss)in enumerate(distance_and_idxs)
-        ]).to(keys.device)
-        distances = torch.stack([
-            distss for distss, _ in distance_and_idxs
-        ], 0)
-        # only return label, return span_info later?
-        return labels, distances
+        D, I = search_index_pytorch(self.raw_index, keys, k)
+        I_np = I.detach().cpu().numpy()
+        labels = torch.from_numpy(self.labels[I_np]).to(keys.device)
+        nn_keys = keys.new(self.keys[I_np])
+        return labels, -D if self.metric == "l2" else D, nn_keys
 
     def topk_torch_np(self, keys, k, label_only=True):
-        distance_and_idxs = [
-            [x.cpu().numpy() for x in search_index_pytorch(index, keys, k)]
-            for index in self.raw_indices
-        ]
-        # distance_and_idxs: [
-        #   [
-        #       (
-        #           # distance
-        #           nq x k, float32
-        #           # idx
-        #           nq x k, int64
-        #       )
-        #   ]
-        #   for each index
-        # ]
-        labels = np.array([
-            [
-                [
-                    self.raw_span_infos[index][idx].label_idx
-                    for idx in idxs
-                ] for idxs in idxss#.tolist()
-            ] for index, (distss, idxss)in enumerate(distance_and_idxs)
-        ], dtype=np.int32)
-        distances = np.array([
-            distss for distss, _ in distance_and_idxs
-        ])
-        # only return label, return span_info later?
-        return labels, distances
-
-
-    def build(self):
-        pass
+        D, I = search_index_pytorch(self.raw_index, keys, k)
+        D = D.detach().cpu().numpy()
+        I_np = I.detach().cpu().numpy()
+        labels = self.labels[I_np]
+        nn_keys = self.keys[I_np]
+        return labels, -D if self.metric == "l2" else D, nn_keys
 
     def load(self, prefix=None):
         assert self.prefix or prefix, "One of self.prefix or prefix must not be None"
         prefix = self.prefix if prefix is None else prefix
 
-        ann_names, info_names = get_index_paths(prefix, self.num_indices, "faiss")
-        for i, (t, ann_name, info_name) in enumerate(zip(
-            self.raw_indices, ann_names, info_names,
-        )):
-            self.raw_indices[i] = faiss.read_index(str(ann_name))
-            self.raw_span_infos[i] = pickle.load(open(str(info_name), "rb"))
+        ann_name, info_name, key_name, label_name, labelkey_name = get_index_paths(prefix, self.num_labels, "faiss")
+        self.raw_index = faiss.read_index(str(ann_name))
+        self.raw_span_infos = pickle.load(open(str(info_name), "rb"))
+        self.keys = np.load(key_name)
+        self.labels = np.load(label_name)
+        self.label2keys = np.load(labelkey_name, allow_pickle=True)
 
     def save(self, prefix=None):
         assert self.prefix or prefix, "One of self.prefix or prefix must not be None"
         prefix = self.prefix if prefix is None else prefix
 
-        ann_names, info_names = get_index_paths(prefix, self.num_indices, "faiss")
-        for t, span_info, ann_name, info_name in zip(
-            self.raw_indices, self.raw_span_infos, ann_names, info_names,
-        ):
-            ann_name.parent.mkdir(parents=True, exist_ok=True)
-            faiss.write_index(t, str(ann_name))
-            pickle.dump(span_info, open(info_name, "wb"))
+        ann_name, info_name, key_name, label_name, labelkey_name = get_index_paths(prefix, self.num_labels, "faiss")
+        ann_name.parent.mkdir(parents=True, exist_ok=True)
+        faiss.write_index(self.raw_index, str(ann_name))
+        pickle.dump(self.raw_span_infos, open(info_name, "wb"))
+        np.save(key_name, self.keys)
+        np.save(label_name, self.labels)
+        np.save(labelkey_name, self.label2keys)
 
     def to(self, device):
-        if isinstance(device, torch.device):
-            device = device.index
-        res = faiss.StandardGpuResources()
-        self.raw_indices = [
-            faiss.index_cpu_to_gpu(res, device, x)
-            for x in self.raw_indices
+        if device == self.device:
+            pass
+        elif device == torch.device("cpu") or device < 0:
+            # To cpu
+            self.raw_index = faiss.index_gpu_to_cpu(self.raw_index)
+        else:
+            # To gpu
+            if isinstance(device, torch.device):
+                device = device.index
+            res = faiss.StandardGpuResources()
+            self.raw_index = faiss.index_cpu_to_gpu(res, device, self.raw_index)
+
+
+def get_span_reps_infos(parser, treebank, batch_size=32):
+    span_reps = []
+    span_infos = []
+    for start_index in range(0, len(treebank), batch_size):
+        subbatch_trees = treebank[start_index:start_index+batch_size]
+        subbatch_sentences = [
+            [(leaf.tag, leaf.word) for leaf in tree.leaves()]
+            for tree in subbatch_trees
         ]
+        span_representations = parser.parse_batch(
+            subbatch_sentences,
+            return_span_representations = True,
+        )
+        for sub_index, (tree, chart) in enumerate(zip(subbatch_trees, span_representations)):
+            train_index = start_index + sub_index
+            chart = chart.cpu().numpy()
+            # tree.leaves(): T
+            # chart: T+1 x T+1 x H (span reps)
+            T = len(list(tree.leaves()))
+            parse = tree.convert()
+            for length in range(1, T+1):
+                for left in range(0, T+1-length):
+                    right = left + length
+                    label = parse.oracle_label(left, right)
+                    # NOTE: removed ignore_empty
+                    label_idx = parser.label_vocab.index(label)
+                    span_rep = chart[left, right]
+                    span_info = SpanInfo(
+                        label_idx = label_idx,
+                        label = label,
+                        sen_idx = train_index,
+                        left = left,
+                        right = right,
+                    )
+                    span_reps.append(span_rep)
+                    span_infos.append(span_info)
+    return span_reps, span_infos
+

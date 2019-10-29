@@ -158,7 +158,37 @@ def faiss_gpu():
         distances.cpu().numpy(),
     )
 
-"""
+def faiss_gpu2():
+    c = chart_gpu.clone()
+    flat_chart = c.view(-1, c.shape[-1])
+    r = reps_gpu[left, right]
+    labels, distances = faiss_index_gpu.topk_torch(r, 8)
+    cells = scatter.scatter_lse(
+        distances[0],
+        labels[0],
+        dim = -1,
+        dim_size = L,
+        fill_value = 0,
+    )
+    flat_chart = torch.zeros((T+1) * (T+1), L, device=c.device)
+    flat_chart = flat_chart.scatter(
+        0,
+        flat_indices_gpu.unsqueeze(-1).expand_as(cells),
+        cells,
+    )
+    c = (flat_chart
+        .view(T+1, T+1, flat_chart.shape[-1])
+    )
+    return (
+        faiss_index_gpu.chart_torch(
+            T, L, labels, distances, flat_indices_gpu
+        ).cpu().numpy(),
+        labels.cpu().numpy(),
+        distances.cpu().numpy(),
+    )
+
+
+#"""
 # correctness
 ca, la, da = annoy_np()
 cf, lf, df = faiss_np()
@@ -173,7 +203,9 @@ assert np.allclose(lf, l0)
 assert np.allclose(df, d0)
 #import pdb; pdb.set_trace()
 assert np.allclose(cf, c0)
-"""
+c1, l1, d1 = faiss_gpu2()
+import pdb; pdb.set_trace()
+#"""
 
 def get_time(f, K=5):
     t = time.time()

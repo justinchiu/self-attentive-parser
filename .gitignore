@@ -49,4 +49,4 @@ var/
 # Nearest neighbour files
 *.ann*
 *.info*
-
+index/

@@ -10,6 +10,7 @@ import scatter
 
 import torch_struct as ts
 import cky
+from index import chart_torch
 
 use_cuda = torch.cuda.is_available()
 if use_cuda:
@@ -780,6 +781,7 @@ class NKChartParser(nn.Module):
 
         #self.label_weights = nn.Parameter(torch.ones(label_vocab.size))
         self.label_weights = nn.Parameter(torch.zeros(label_vocab.size))
+        self.chart_weight = nn.Parameter(torch.Tensor([-10]))
 
         if hparams.predict_tags:
             assert not hparams.use_tags, "use_tags and predict_tags are mutually exclusive"
@@ -808,7 +810,8 @@ class NKChartParser(nn.Module):
         y = self.label_proj.weight
         x = x.unsqueeze(-2)
         y = y.view(*([1] * d + list(y.shape)))
-        return (x - y).norm(dim=-1)
+        #return (x - y).norm(dim=-1)
+        return (x-y).pow(2).sum(-1)
 
     @property
     def model(self):
@@ -901,6 +904,7 @@ class NKChartParser(nn.Module):
         span_index = None,
         k = None,
         zero_empty = False,
+        train_nn = False,
     ):
         # If return span representations, don't train
         #is_train = golds is not None and not return_span_representations
@@ -1191,14 +1195,20 @@ class NKChartParser(nn.Module):
                 flat_indices = left * (T+1) + right
                 queries = span_features[left, right]
                 # for now
-                labels, distances = span_index.topk(queries, k)
+                labels, distances, _ = span_index.topk(queries, k)
                 # numpy version
-                chart = np.zeros((T+1, T+1, len(self.label_vocab.values)), dtype=np.float32)
+                chart = np.ones(
+                    (T+1, T+1, len(self.label_vocab.values)),
+                    dtype=np.float32,
+                ) * self.chart_weight.detach().cpu().numpy()
                 for le, ri, l, d in zip(
                     left, right,
-                    labels[0], distances[0],
+                    labels, distances,
                 ):
+                    chart[le, ri, l] = float("-inf")
                     np.logaddexp.at(chart[le, ri], l, d)
+                    #if le == 25 and ri == 32:
+                        #import pdb; pdb.set_trace()
 
                 """
                 # only one index right now
@@ -1225,6 +1235,7 @@ class NKChartParser(nn.Module):
                     chart *= self.label_weights.cpu().numpy()
                 if zero_empty:
                     chart[:,:,0] = 0
+                    chart[:,:,0] = -10
                 decoder_args = dict(
                     sentence_len=T,
                     label_scores_chart = chart,
@@ -1236,6 +1247,7 @@ class NKChartParser(nn.Module):
                     False,
                     **decoder_args,
                 )
+                #import pdb; pdb.set_trace()
 
                 idx = -1
                 def make_tree():
@@ -1312,14 +1324,13 @@ class NKChartParser(nn.Module):
         with env():
             for i, (start, end) in enumerate(zip(fp_startpoints, fp_endpoints)):
                 # get chart score here
-                chart = self.label_scores_from_annotations(
+                chart = self.label_scores_from_annotations_t(
                     fencepost_annotations_start[start:end,:],
                     fencepost_annotations_end[start:end,:],
                     span_index = span_index,
                     zero_empty = zero_empty,
                     k = k,
                 ) if span_index is not None else None
-                #import pdb; pdb.set_trace()
                 # TODO: FIX BACKPROP THROUGH CHART
                 # get viterbi tree and gold tree span indices
                 p_i, p_j, p_label, p_augment, g_i, g_j, g_label = self.parse_from_annotations(
@@ -1382,7 +1393,6 @@ class NKChartParser(nn.Module):
                 pscore += sum(chart[x] for x in zip(pi, pj, pl))
                 gscore += sum(chart[x] for x in zip(gi, gj, gl))
             loss = pscore - gscore + paugment_total
-            import pdb; pdb.set_trace()
             #print(self.label_weights)
             return None, loss
 
@@ -1431,11 +1441,12 @@ class NKChartParser(nn.Module):
             # loop over chart
             # just to be consistent
             T = fencepost_annotations_end.shape[0] - 1
-            span_reps_np = span_reps.cpu().numpy()
-            label_scores_chart = np.zeros(
+            span_reps_np = span_reps.detach().cpu().numpy()
+            # can't train through chart_weight
+            label_scores_chart = np.ones(
                 (T+1, T+1, len(self.label_vocab.values)),
                 dtype = np.float32,
-            )
+            ) * self.chart_weight.detach().cpu().numpy()
             indices = np.array([
                 (left, left+length)
                 for length in range(1, T+1)
@@ -1446,18 +1457,71 @@ class NKChartParser(nn.Module):
             flat_indices = left * (T+1) + right
             queries = span_reps_np[left, right]
             # for now
-            labels, distances = span_index.topk(queries, k)
+            labels, distances, keys = span_index.topk(queries, k)
             # numpy version
             for le, ri, l, d in zip(
                 left, right,
-                labels[0], distances[0],
+                labels, distances,
             ):
+                label_scores_chart[le, ri, l] = float("-inf")
                 np.logaddexp.at(label_scores_chart[le, ri], l, d)
             if zero_empty:
                 label_scores_chart[:,:,0] = 0
             chart = torch.FloatTensor(label_scores_chart).to(fencepost_annotations_end.device)
-            import pdb; pdb.set_trace()
-            return chart * self.label_weights if self.use_label_weights else chart
+            #import pdb; pdb.set_trace()
+            #return chart * self.label_weights if self.use_label_weights else chart
+            return chart * self.label_weights if self.use_label_weights else chart, labels, distances
+
+        # if no span_index, proceed as normal
+        #label_scores_chart = self.label_proj(span_reps)
+        label_scores_chart = (self.label_proj(span_reps)
+            if self.metric == "dot" else
+            -self.l2(span_reps)
+        )
+        if self.zero_empty:
+            label_scores_chart = torch.cat([
+                label_scores_chart.new_zeros(
+                    (label_scores_chart.size(0), label_scores_chart.size(1), 1),
+                ),
+                label_scores_chart,
+            ], 2)
+        return label_scores_chart
+
+    def label_scores_from_annotations_t(
+        self,
+        fencepost_annotations_start,
+        fencepost_annotations_end,
+        span_index = None,
+        zero_empty = False,
+        k = None,
+    ):
+        # Note that the bias added to the final layer norm is useless because
+        # this subtraction gets rid of it
+        span_features = (
+            torch.unsqueeze(fencepost_annotations_end, 0)
+            - torch.unsqueeze(fencepost_annotations_start, 1)
+        )
+        span_reps = self.f_rep(span_features)
+        #span_reps = span_reps.cpu()
+        if span_index is not None:
+            # loop over chart
+            # just to be consistent
+            T = fencepost_annotations_end.shape[0] - 1
+            indices = torch.LongTensor([
+                (left, left+length)
+                for length in range(1, T+1)
+                for left in range(0, T+1-length)
+            ]).to(span_reps.device)
+            left = indices[:,0]
+            right = indices[:,1]
+            flat_indices = left * (T+1) + right
+            queries = span_reps[left, right]
+            # for now
+            labels, distances, keys = span_index.topk_torch(queries, k)
+            # redo distances using keys
+            dists = -(queries.unsqueeze(1) - keys).pow(2).sum(-1)
+            chart = chart_torch(T, len(self.label_vocab.values), labels, dists, flat_indices, self.chart_weight)
+            return chart * seltf.label_weights if self.use_label_weights else chart
 
         # if no span_index, proceed as normal
         #label_scores_chart = self.label_proj(span_reps)
