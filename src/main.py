@@ -1,6 +1,7 @@
 import argparse
 import itertools
 import os.path
+import gc
 import time
 import pickle
 
@@ -21,6 +22,16 @@ import trees
 tokens = parse_jc
 
 import parse_nk as old
+
+"""
+from pympler import muppy, summary
+import psutil
+def print_mem():
+    all_objects = muppy.get_objects()
+    sum1 = summary.summarize(all_objects)
+    summary.print_(sum1)
+    print(psutil.Process().memory_full_info().rss / 1e9)
+"""
 
 def torch_load(load_path):
     if parse_jc.use_cuda:
@@ -427,7 +438,27 @@ def run_train(args, hparams):
                 check_dev()
                 if span_index is not None:
                     # recompute span_index
-                    pass
+                    reindex_time = time.time()
+                    span_index.reset()
+                    span_index.to(args.index_devid)
+                    span_reps, span_infos = index.get_span_reps_infos(
+                        parser, train_treebank, 128,
+                    )
+                    span_index.add(span_reps, span_infos)
+                    span_index.build()
+
+                    print(f"reindex-elapsed: {format_elapsed(reindex_time)}")
+                    save_time = time.time()
+                    prefix = index.get_index_prefix(
+                        index_base_path = args.index_path,
+                        full_model_path = args.model_path_base,
+                        nn_prefix = args.nn_prefix + "HI",
+                    )
+                    span_index.to(-1)
+                    print(f"Saving recomputed index")
+                    span_index.save(prefix)
+                    span_index.to(args.index_devid)
+                    print(f"save-elapsed: {format_elapsed(save_time)}")
 
         # adjust learning rate at the end of an epoch
         if (total_processed // args.batch_size + 1) > hparams.learning_rate_warmup_steps:

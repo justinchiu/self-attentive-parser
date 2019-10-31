@@ -1,5 +1,6 @@
 
 import pickle
+import gc
 
 import numpy as np
 
@@ -167,7 +168,8 @@ def init_faiss(dim, metric, num_labels, pca=False, in_dim=2000):
         # span_info
         [],
         # key
-        [],
+        #[],
+        np.empty((0, dim)),
         # labels
         [],
         # label to key idxs
@@ -298,22 +300,37 @@ class FaissIndex:
         self.metric = metric
         self.num_labels = num_labels
 
+        self.device = torch.device("cpu")
+
         # dispatch to respective constructor
         # NOTE: REMOVED LABEL INDEX
+        self.reset()
+
+        # filepath prefix for saving and loading
+        self.prefix = prefix
+
+    def reset(self):
+        self.device = torch.device("cpu")
+        if hasattr(self, "raw_index"):
+            del self.raw_index
+            del self.raw_span_infos
+            del self.keys
+            del self.labels
+            del self.label2keys
+        if hasattr(self, "res"):
+            del self.res
         (
             self.raw_index,
             self.raw_span_infos,
             self.keys,
             self.labels,
             self.label2keys,
-        ) = init_faiss(dim, metric, num_labels)
-
-        # filepath prefix for saving and loading
-        self.prefix = prefix
-
-        self.device = torch.device("cpu")
+        ) = init_faiss(self.dim, self.metric, self.num_labels)
+        gc.collect()
+        self.res = None
 
     def add_item(self, key, value):
+        raise NotImplementedError
         self.raw_index.add(key)
         self.raw_span_infos.append(value)
         self.keys.append(key)
@@ -326,22 +343,22 @@ class FaissIndex:
         # key is the vector
         # value is the info
         self.raw_span_infos.extend(values)
+        #N = len(self.keys)
+        #self.keys = np.concatenate([self.keys, keys], 0)
+        self.keys = keys
+        N = 0
         # loop over keys and values to add to label2keys
-        for key, value in zip(keys, values):
-            self.keys.append(key)
-            idx = len(self.keys)
+        for i, value in enumerate(values):
             lbl = value.label_idx
             self.labels.append(lbl)
-            self.label2keys[lbl].append(idx)
+            self.label2keys[lbl].append(N+i)
 
     def build(self):
-        self.keys = np.stack(self.keys)
-
         self.raw_index.train(self.keys)
         self.raw_index.add(self.keys)
 
         self.labels = np.array(self.labels)
-        self.label2keys = [np.array(xs) for xs in self.label2keys]
+        #self.label2keys = [np.array(xs) for xs in self.label2keys]
 
     # can mess with this later
     def topk(self, keys, k, label_only=True):
@@ -349,6 +366,8 @@ class FaissIndex:
         # TODO: fix this! flatten along indices and batch all queries
         D, I = self.raw_index.search(keys, k)
         labels = self.labels[I]
+        # if self.keys : torch
+        #nn_keys = self.keys[torch.from_numpy(I)].numpy()
         nn_keys = self.keys[I]
         return labels, -D if self.metric == "l2" else D, nn_keys
 
@@ -356,7 +375,9 @@ class FaissIndex:
         D, I = search_index_pytorch(self.raw_index, keys, k)
         I_np = I.detach().cpu().numpy()
         labels = torch.from_numpy(self.labels[I_np]).to(keys.device)
-        nn_keys = keys.new(self.keys[I_np])
+        # if self.keys: torch
+        #nn_keys = self.keys[I].to(keys.device)
+        nn_keys = torch.from_numpy(self.keys[I_np]).to(keys.device)
         return labels, -D if self.metric == "l2" else D, nn_keys
 
     def topk_torch_np(self, keys, k, label_only=True):
@@ -376,7 +397,8 @@ class FaissIndex:
         self.raw_span_infos = pickle.load(open(str(info_name), "rb"))
         self.keys = np.load(key_name)
         self.labels = np.load(label_name)
-        self.label2keys = np.load(labelkey_name, allow_pickle=True)
+        with open(labelkey_name, "rb") as f:
+            self.label2keys = pickle.load(f)
 
     def save(self, prefix=None):
         assert self.prefix or prefix, "One of self.prefix or prefix must not be None"
@@ -386,37 +408,49 @@ class FaissIndex:
         ann_name.parent.mkdir(parents=True, exist_ok=True)
         faiss.write_index(self.raw_index, str(ann_name))
         pickle.dump(self.raw_span_infos, open(info_name, "wb"))
+        #torch.save(self.keys, key_name)
         np.save(key_name, self.keys)
         np.save(label_name, self.labels)
-        np.save(labelkey_name, self.label2keys)
+        with open(labelkey_name, "wb") as f:
+            pickle.dump(self.label2keys, f)
 
     def to(self, device):
         if device == self.device:
             pass
         elif device == torch.device("cpu") or device < 0:
+            self.device = device
             # To cpu
             self.raw_index = faiss.index_gpu_to_cpu(self.raw_index)
         else:
+            self.device = device
             # To gpu
             if isinstance(device, torch.device):
                 device = device.index
-            res = faiss.StandardGpuResources()
-            self.raw_index = faiss.index_cpu_to_gpu(res, device, self.raw_index)
+            self.res = faiss.StandardGpuResources()
+            self.res.noTempMemory()
+            self.raw_index = faiss.index_cpu_to_gpu(self.res, device, self.raw_index)
 
 
 def get_span_reps_infos(parser, treebank, batch_size=32):
-    span_reps = []
+    # get lengths
+    N = 0
+    for tree in treebank:
+        T = len(list(tree.leaves()))
+        N += len([0 for length in range(1, T+1) for left in range(0, T+1-length)])
+    span_reps = np.empty((N, parser.d_label_hidden), dtype=np.float32)
     span_infos = []
+    i = 0
     for start_index in range(0, len(treebank), batch_size):
         subbatch_trees = treebank[start_index:start_index+batch_size]
         subbatch_sentences = [
             [(leaf.tag, leaf.word) for leaf in tree.leaves()]
             for tree in subbatch_trees
         ]
-        span_representations = parser.parse_batch(
-            subbatch_sentences,
-            return_span_representations = True,
-        )
+        with torch.no_grad():
+            span_representations = parser.parse_batch(
+                subbatch_sentences,
+                return_span_representations = True,
+            )
         for sub_index, (tree, chart) in enumerate(zip(subbatch_trees, span_representations)):
             train_index = start_index + sub_index
             chart = chart.cpu().numpy()
@@ -438,7 +472,10 @@ def get_span_reps_infos(parser, treebank, batch_size=32):
                         left = left,
                         right = right,
                     )
-                    span_reps.append(span_rep)
+                    span_reps[i] = span_rep
                     span_infos.append(span_info)
+                    i += 1
+            del chart
+        del span_representations
     return span_reps, span_infos
 

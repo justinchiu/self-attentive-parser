@@ -656,6 +656,7 @@ class NKChartParser(nn.Module):
         self.partitioned = hparams.partitioned
         self.d_content = (self.d_model // 2) if self.partitioned else self.d_model
         self.d_positional = (hparams.d_model // 2) if self.partitioned else None
+        self.d_label_hidden = hparams.d_label_hidden
 
         num_embeddings_map = {
             'tags': tag_vocab.size,
