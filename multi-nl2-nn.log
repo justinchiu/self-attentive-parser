@@ -1,0 +1,321 @@
+USING CUDA
+USING CUDA
+Manual seed for pytorch: 499670852
+Hyperparameters:
+attention_dropout 0.2
+batch_cky False
+bert_do_lower_case True
+bert_model 'bert-base-multilingual-cased'
+bert_transliterate ''
+char_lstm_input_dropout 0.2
+clip_grad_norm 0.0
+d_char_emb 32
+d_ff 2048
+d_kv 64
+d_label_hidden 256
+d_model 1024
+d_tag_hidden 256
+elmo_dropout 0.5
+embedding_dropout 0.0
+integration 'hard'
+label_weights False
+learning_rate 1e-05
+learning_rate_warmup_steps 160
+max_consecutive_decays 3
+max_len_dev 0
+max_len_train 0
+metric 'l2'
+morpho_emb_dropout 0.2
+no_mlp False
+num_heads 8
+num_layers 2
+num_layers_position_only 0
+partitioned True
+predict_tags False
+relu_dropout 0.1
+residual_dropout 0.2
+sentence_max_len 300
+step_decay True
+step_decay_factor 0.5
+step_decay_patience 5
+tag_emb_dropout 0.2
+tag_loss_scale 5.0
+timing_dropout 0.0
+use_bert True
+use_bert_only False
+use_chars_lstm False
+use_elmo False
+use_label_weights False
+use_tags False
+use_words False
+word_emb_dropout 0.4
+zero_empty False
+Loading training trees from data/02-21.10way.clean...
+Loaded 39,832 training examples.
+Loading development trees from data/22.auto.clean...
+Loaded 1,700 development examples.
+Processing trees for training...
+Constructing vocabularies...
+Initializing model...
+Loading parameters from models/en_multibert_empty_l2_dev=94.94.pt
+Using gpu 1 for index
+Initializing optimizer...
+Training...
+epoch 1 batch 1/1,245 processed 32 batch-loss 60.7546 grad-norm 555.0831 epoch-elapsed 0h00m04s total-elapsed 0h00m04s
+epoch 1 batch 2/1,245 processed 64 batch-loss 62.7924 grad-norm 498.9159 epoch-elapsed 0h00m06s total-elapsed 0h00m06s
+epoch 1 batch 3/1,245 processed 96 batch-loss 49.8693 grad-norm 646.3342 epoch-elapsed 0h00m09s total-elapsed 0h00m09s
+epoch 1 batch 4/1,245 processed 128 batch-loss 52.3343 grad-norm 427.3039 epoch-elapsed 0h00m11s total-elapsed 0h00m11s
+epoch 1 batch 5/1,245 processed 160 batch-loss 55.2889 grad-norm 462.6871 epoch-elapsed 0h00m13s total-elapsed 0h00m13s
+epoch 1 batch 6/1,245 processed 192 batch-loss 43.7473 grad-norm 483.2754 epoch-elapsed 0h00m16s total-elapsed 0h00m16s
+epoch 1 batch 7/1,245 processed 224 batch-loss 76.9486 grad-norm 711.6780 epoch-elapsed 0h00m19s total-elapsed 0h00m19s
+epoch 1 batch 8/1,245 processed 256 batch-loss 48.9662 grad-norm 342.3774 epoch-elapsed 0h00m21s total-elapsed 0h00m21s
+epoch 1 batch 9/1,245 processed 288 batch-loss 78.2619 grad-norm 859.1034 epoch-elapsed 0h00m25s total-elapsed 0h00m25s
+epoch 1 batch 10/1,245 processed 320 batch-loss 53.7203 grad-norm 529.1352 epoch-elapsed 0h00m27s total-elapsed 0h00m27s
+epoch 1 batch 11/1,245 processed 352 batch-loss 50.8676 grad-norm 457.0085 epoch-elapsed 0h00m30s total-elapsed 0h00m30s
+epoch 1 batch 12/1,245 processed 384 batch-loss 59.8728 grad-norm 611.8085 epoch-elapsed 0h00m33s total-elapsed 0h00m33s
+epoch 1 batch 13/1,245 processed 416 batch-loss 54.7997 grad-norm 328.1484 epoch-elapsed 0h00m36s total-elapsed 0h00m36s
+epoch 1 batch 14/1,245 processed 448 batch-loss 48.0761 grad-norm 491.3554 epoch-elapsed 0h00m38s total-elapsed 0h00m38s
+epoch 1 batch 15/1,245 processed 480 batch-loss 55.5990 grad-norm 425.6958 epoch-elapsed 0h00m41s total-elapsed 0h00m41s
+epoch 1 batch 16/1,245 processed 512 batch-loss 71.7623 grad-norm 763.2818 epoch-elapsed 0h00m44s total-elapsed 0h00m44s
+epoch 1 batch 17/1,245 processed 544 batch-loss 48.4597 grad-norm 404.4407 epoch-elapsed 0h00m46s total-elapsed 0h00m46s
+epoch 1 batch 18/1,245 processed 576 batch-loss 55.2838 grad-norm 557.0514 epoch-elapsed 0h00m49s total-elapsed 0h00m49s
+epoch 1 batch 19/1,245 processed 608 batch-loss 54.2325 grad-norm 485.5164 epoch-elapsed 0h00m52s total-elapsed 0h00m52s
+epoch 1 batch 20/1,245 processed 640 batch-loss 70.1932 grad-norm 453.5389 epoch-elapsed 0h00m55s total-elapsed 0h00m55s
+epoch 1 batch 21/1,245 processed 672 batch-loss 61.1911 grad-norm 355.1978 epoch-elapsed 0h00m58s total-elapsed 0h00m58s
+epoch 1 batch 22/1,245 processed 704 batch-loss 61.9127 grad-norm 532.1141 epoch-elapsed 0h01m01s total-elapsed 0h01m01s
+epoch 1 batch 23/1,245 processed 736 batch-loss 58.8155 grad-norm 389.8921 epoch-elapsed 0h01m03s total-elapsed 0h01m03s
+epoch 1 batch 24/1,245 processed 768 batch-loss 49.8763 grad-norm 360.4994 epoch-elapsed 0h01m06s total-elapsed 0h01m06s
+epoch 1 batch 25/1,245 processed 800 batch-loss 47.5331 grad-norm 416.3340 epoch-elapsed 0h01m08s total-elapsed 0h01m08s
+epoch 1 batch 26/1,245 processed 832 batch-loss 41.3917 grad-norm 430.1878 epoch-elapsed 0h01m11s total-elapsed 0h01m11s
+epoch 1 batch 27/1,245 processed 864 batch-loss 61.7771 grad-norm 470.1271 epoch-elapsed 0h01m13s total-elapsed 0h01m13s
+epoch 1 batch 28/1,245 processed 896 batch-loss 58.1322 grad-norm 401.5211 epoch-elapsed 0h01m16s total-elapsed 0h01m16s
+epoch 1 batch 29/1,245 processed 928 batch-loss 70.0441 grad-norm 576.9415 epoch-elapsed 0h01m20s total-elapsed 0h01m20s
+epoch 1 batch 30/1,245 processed 960 batch-loss 68.0893 grad-norm 428.4768 epoch-elapsed 0h01m24s total-elapsed 0h01m24s
+epoch 1 batch 31/1,245 processed 992 batch-loss 80.8635 grad-norm 512.6170 epoch-elapsed 0h01m28s total-elapsed 0h01m28s
+epoch 1 batch 32/1,245 processed 1,024 batch-loss 76.3794 grad-norm 576.1307 epoch-elapsed 0h01m32s total-elapsed 0h01m32s
+epoch 1 batch 33/1,245 processed 1,056 batch-loss 53.2103 grad-norm 464.3016 epoch-elapsed 0h01m35s total-elapsed 0h01m35s
+epoch 1 batch 34/1,245 processed 1,088 batch-loss 50.4814 grad-norm 581.6677 epoch-elapsed 0h01m38s total-elapsed 0h01m38s
+epoch 1 batch 35/1,245 processed 1,120 batch-loss 54.2534 grad-norm 446.7487 epoch-elapsed 0h01m40s total-elapsed 0h01m40s
+epoch 1 batch 36/1,245 processed 1,152 batch-loss 54.0725 grad-norm 432.4274 epoch-elapsed 0h01m43s total-elapsed 0h01m43s
+epoch 1 batch 37/1,245 processed 1,184 batch-loss 48.6094 grad-norm 335.2999 epoch-elapsed 0h01m46s total-elapsed 0h01m46s
+epoch 1 batch 38/1,245 processed 1,216 batch-loss 46.9339 grad-norm 436.0085 epoch-elapsed 0h01m48s total-elapsed 0h01m48s
+epoch 1 batch 39/1,245 processed 1,248 batch-loss 61.4667 grad-norm 560.1579 epoch-elapsed 0h01m52s total-elapsed 0h01m52s
+epoch 1 batch 40/1,245 processed 1,280 batch-loss 48.6894 grad-norm 456.1071 epoch-elapsed 0h01m54s total-elapsed 0h01m54s
+epoch 1 batch 41/1,245 processed 1,312 batch-loss 66.7561 grad-norm 435.9114 epoch-elapsed 0h01m58s total-elapsed 0h01m58s
+epoch 1 batch 42/1,245 processed 1,344 batch-loss 63.7849 grad-norm 503.8409 epoch-elapsed 0h02m01s total-elapsed 0h02m01s
+epoch 1 batch 43/1,245 processed 1,376 batch-loss 61.0518 grad-norm 415.2473 epoch-elapsed 0h02m05s total-elapsed 0h02m05s
+epoch 1 batch 44/1,245 processed 1,408 batch-loss 43.8077 grad-norm 329.6569 epoch-elapsed 0h02m07s total-elapsed 0h02m07s
+epoch 1 batch 45/1,245 processed 1,440 batch-loss 51.0361 grad-norm 392.5573 epoch-elapsed 0h02m10s total-elapsed 0h02m10s
+epoch 1 batch 46/1,245 processed 1,472 batch-loss 48.1250 grad-norm 472.2187 epoch-elapsed 0h02m13s total-elapsed 0h02m13s
+epoch 1 batch 47/1,245 processed 1,504 batch-loss 53.6493 grad-norm 394.9776 epoch-elapsed 0h02m15s total-elapsed 0h02m15s
+epoch 1 batch 48/1,245 processed 1,536 batch-loss 56.5115 grad-norm 460.1643 epoch-elapsed 0h02m18s total-elapsed 0h02m18s
+epoch 1 batch 49/1,245 processed 1,568 batch-loss 42.3667 grad-norm 297.6289 epoch-elapsed 0h02m20s total-elapsed 0h02m20s
+epoch 1 batch 50/1,245 processed 1,600 batch-loss 41.8991 grad-norm 329.4086 epoch-elapsed 0h02m22s total-elapsed 0h02m22s
+epoch 1 batch 51/1,245 processed 1,632 batch-loss 49.0501 grad-norm 260.1255 epoch-elapsed 0h02m25s total-elapsed 0h02m25s
+epoch 1 batch 52/1,245 processed 1,664 batch-loss 60.9829 grad-norm 478.0903 epoch-elapsed 0h02m29s total-elapsed 0h02m29s
+epoch 1 batch 53/1,245 processed 1,696 batch-loss 50.6988 grad-norm 571.4047 epoch-elapsed 0h02m32s total-elapsed 0h02m32s
+epoch 1 batch 54/1,245 processed 1,728 batch-loss 44.8153 grad-norm 332.1196 epoch-elapsed 0h02m34s total-elapsed 0h02m34s
+epoch 1 batch 55/1,245 processed 1,760 batch-loss 43.6736 grad-norm 303.5102 epoch-elapsed 0h02m36s total-elapsed 0h02m36s
+epoch 1 batch 56/1,245 processed 1,792 batch-loss 57.7607 grad-norm 471.7255 epoch-elapsed 0h02m39s total-elapsed 0h02m39s
+epoch 1 batch 57/1,245 processed 1,824 batch-loss 50.2779 grad-norm 346.1185 epoch-elapsed 0h02m42s total-elapsed 0h02m42s
+epoch 1 batch 58/1,245 processed 1,856 batch-loss 58.7193 grad-norm 369.1315 epoch-elapsed 0h02m46s total-elapsed 0h02m46s
+epoch 1 batch 59/1,245 processed 1,888 batch-loss 39.0607 grad-norm 295.9998 epoch-elapsed 0h02m48s total-elapsed 0h02m48s
+epoch 1 batch 60/1,245 processed 1,920 batch-loss 52.5962 grad-norm 352.4407 epoch-elapsed 0h02m51s total-elapsed 0h02m51s
+epoch 1 batch 61/1,245 processed 1,952 batch-loss 59.1939 grad-norm 658.6318 epoch-elapsed 0h02m54s total-elapsed 0h02m54s
+epoch 1 batch 62/1,245 processed 1,984 batch-loss 57.8669 grad-norm 727.3154 epoch-elapsed 0h02m57s total-elapsed 0h02m57s
+epoch 1 batch 63/1,245 processed 2,016 batch-loss 52.0735 grad-norm 398.7213 epoch-elapsed 0h03m00s total-elapsed 0h03m00s
+epoch 1 batch 64/1,245 processed 2,048 batch-loss 43.6392 grad-norm 267.0656 epoch-elapsed 0h03m02s total-elapsed 0h03m02s
+epoch 1 batch 65/1,245 processed 2,080 batch-loss 45.6037 grad-norm 351.1651 epoch-elapsed 0h03m05s total-elapsed 0h03m05s
+epoch 1 batch 66/1,245 processed 2,112 batch-loss 58.7502 grad-norm 601.2302 epoch-elapsed 0h03m08s total-elapsed 0h03m08s
+epoch 1 batch 67/1,245 processed 2,144 batch-loss 42.8506 grad-norm 248.1973 epoch-elapsed 0h03m11s total-elapsed 0h03m11s
+epoch 1 batch 68/1,245 processed 2,176 batch-loss 53.7515 grad-norm 460.3251 epoch-elapsed 0h03m15s total-elapsed 0h03m15s
+epoch 1 batch 69/1,245 processed 2,208 batch-loss 51.4900 grad-norm 285.3012 epoch-elapsed 0h03m17s total-elapsed 0h03m17s
+epoch 1 batch 70/1,245 processed 2,240 batch-loss 62.9601 grad-norm 505.0739 epoch-elapsed 0h03m21s total-elapsed 0h03m21s
+epoch 1 batch 71/1,245 processed 2,272 batch-loss 44.7341 grad-norm 305.5060 epoch-elapsed 0h03m23s total-elapsed 0h03m23s
+epoch 1 batch 72/1,245 processed 2,304 batch-loss 42.3947 grad-norm 328.8531 epoch-elapsed 0h03m26s total-elapsed 0h03m26s
+epoch 1 batch 73/1,245 processed 2,336 batch-loss 54.0681 grad-norm 880.4830 epoch-elapsed 0h03m29s total-elapsed 0h03m29s
+epoch 1 batch 74/1,245 processed 2,368 batch-loss 45.7226 grad-norm 349.9423 epoch-elapsed 0h03m31s total-elapsed 0h03m31s
+epoch 1 batch 75/1,245 processed 2,400 batch-loss 57.1948 grad-norm 311.1829 epoch-elapsed 0h03m35s total-elapsed 0h03m35s
+epoch 1 batch 76/1,245 processed 2,432 batch-loss 60.0285 grad-norm 429.9880 epoch-elapsed 0h03m39s total-elapsed 0h03m39s
+epoch 1 batch 77/1,245 processed 2,464 batch-loss 61.6671 grad-norm 307.6244 epoch-elapsed 0h03m42s total-elapsed 0h03m42s
+epoch 1 batch 78/1,245 processed 2,496 batch-loss 49.7348 grad-norm 503.4151 epoch-elapsed 0h03m45s total-elapsed 0h03m45s
+epoch 1 batch 79/1,245 processed 2,528 batch-loss 52.8553 grad-norm 339.4328 epoch-elapsed 0h03m49s total-elapsed 0h03m49s
+epoch 1 batch 80/1,245 processed 2,560 batch-loss 45.5924 grad-norm 304.1867 epoch-elapsed 0h03m52s total-elapsed 0h03m52s
+epoch 1 batch 81/1,245 processed 2,592 batch-loss 44.8810 grad-norm 269.0762 epoch-elapsed 0h03m54s total-elapsed 0h03m54s
+epoch 1 batch 82/1,245 processed 2,624 batch-loss 44.9564 grad-norm 277.0416 epoch-elapsed 0h03m57s total-elapsed 0h03m57s
+epoch 1 batch 83/1,245 processed 2,656 batch-loss 43.7683 grad-norm 319.5154 epoch-elapsed 0h04m00s total-elapsed 0h04m00s
+epoch 1 batch 84/1,245 processed 2,688 batch-loss 58.4895 grad-norm 487.6910 epoch-elapsed 0h04m03s total-elapsed 0h04m03s
+epoch 1 batch 85/1,245 processed 2,720 batch-loss 58.2516 grad-norm 479.9179 epoch-elapsed 0h04m07s total-elapsed 0h04m07s
+epoch 1 batch 86/1,245 processed 2,752 batch-loss 54.4760 grad-norm 384.4206 epoch-elapsed 0h04m10s total-elapsed 0h04m10s
+epoch 1 batch 87/1,245 processed 2,784 batch-loss 31.5722 grad-norm 188.7479 epoch-elapsed 0h04m12s total-elapsed 0h04m12s
+epoch 1 batch 88/1,245 processed 2,816 batch-loss 44.1390 grad-norm 266.8931 epoch-elapsed 0h04m15s total-elapsed 0h04m15s
+epoch 1 batch 89/1,245 processed 2,848 batch-loss 40.2060 grad-norm 334.5094 epoch-elapsed 0h04m17s total-elapsed 0h04m17s
+epoch 1 batch 90/1,245 processed 2,880 batch-loss 49.0006 grad-norm 335.9100 epoch-elapsed 0h04m20s total-elapsed 0h04m20s
+epoch 1 batch 91/1,245 processed 2,912 batch-loss 36.9902 grad-norm 368.7637 epoch-elapsed 0h04m23s total-elapsed 0h04m23s
+epoch 1 batch 92/1,245 processed 2,944 batch-loss 46.6003 grad-norm 400.7329 epoch-elapsed 0h04m25s total-elapsed 0h04m25s
+epoch 1 batch 93/1,245 processed 2,976 batch-loss 50.9474 grad-norm 311.8897 epoch-elapsed 0h04m28s total-elapsed 0h04m28s
+epoch 1 batch 94/1,245 processed 3,008 batch-loss 44.2862 grad-norm 328.2327 epoch-elapsed 0h04m31s total-elapsed 0h04m31s
+epoch 1 batch 95/1,245 processed 3,040 batch-loss 43.4867 grad-norm 373.2721 epoch-elapsed 0h04m34s total-elapsed 0h04m34s
+epoch 1 batch 96/1,245 processed 3,072 batch-loss 46.2158 grad-norm 503.8662 epoch-elapsed 0h04m36s total-elapsed 0h04m36s
+epoch 1 batch 97/1,245 processed 3,104 batch-loss 39.8521 grad-norm 368.6022 epoch-elapsed 0h04m39s total-elapsed 0h04m39s
+epoch 1 batch 98/1,245 processed 3,136 batch-loss 57.7041 grad-norm 376.5911 epoch-elapsed 0h04m42s total-elapsed 0h04m42s
+epoch 1 batch 99/1,245 processed 3,168 batch-loss 55.9444 grad-norm 430.2864 epoch-elapsed 0h04m45s total-elapsed 0h04m45s
+epoch 1 batch 100/1,245 processed 3,200 batch-loss 38.9641 grad-norm 181.6796 epoch-elapsed 0h04m48s total-elapsed 0h04m48s
+epoch 1 batch 101/1,245 processed 3,232 batch-loss 41.9205 grad-norm 264.7143 epoch-elapsed 0h04m51s total-elapsed 0h04m51s
+epoch 1 batch 102/1,245 processed 3,264 batch-loss 62.9340 grad-norm 448.9416 epoch-elapsed 0h04m54s total-elapsed 0h04m54s
+epoch 1 batch 103/1,245 processed 3,296 batch-loss 49.4228 grad-norm 462.1470 epoch-elapsed 0h04m57s total-elapsed 0h04m57s
+epoch 1 batch 104/1,245 processed 3,328 batch-loss 45.8908 grad-norm 333.3551 epoch-elapsed 0h04m59s total-elapsed 0h04m59s
+epoch 1 batch 105/1,245 processed 3,360 batch-loss 44.5084 grad-norm 221.3316 epoch-elapsed 0h05m02s total-elapsed 0h05m02s
+epoch 1 batch 106/1,245 processed 3,392 batch-loss 48.4738 grad-norm 320.4722 epoch-elapsed 0h05m04s total-elapsed 0h05m04s
+epoch 1 batch 107/1,245 processed 3,424 batch-loss 45.4154 grad-norm 436.7907 epoch-elapsed 0h05m07s total-elapsed 0h05m07s
+epoch 1 batch 108/1,245 processed 3,456 batch-loss 39.5594 grad-norm 369.7147 epoch-elapsed 0h05m10s total-elapsed 0h05m10s
+epoch 1 batch 109/1,245 processed 3,488 batch-loss 45.7183 grad-norm 285.6409 epoch-elapsed 0h05m12s total-elapsed 0h05m12s
+epoch 1 batch 110/1,245 processed 3,520 batch-loss 35.4851 grad-norm 266.2279 epoch-elapsed 0h05m15s total-elapsed 0h05m15s
+epoch 1 batch 111/1,245 processed 3,552 batch-loss 37.5187 grad-norm 248.2278 epoch-elapsed 0h05m18s total-elapsed 0h05m18s
+epoch 1 batch 112/1,245 processed 3,584 batch-loss 41.6158 grad-norm 301.0195 epoch-elapsed 0h05m21s total-elapsed 0h05m21s
+epoch 1 batch 113/1,245 processed 3,616 batch-loss 63.0423 grad-norm 469.6213 epoch-elapsed 0h05m25s total-elapsed 0h05m25s
+epoch 1 batch 114/1,245 processed 3,648 batch-loss 43.1630 grad-norm 396.8859 epoch-elapsed 0h05m27s total-elapsed 0h05m27s
+epoch 1 batch 115/1,245 processed 3,680 batch-loss 43.9717 grad-norm 322.9572 epoch-elapsed 0h05m30s total-elapsed 0h05m30s
+epoch 1 batch 116/1,245 processed 3,712 batch-loss 49.0805 grad-norm 365.3035 epoch-elapsed 0h05m34s total-elapsed 0h05m34s
+epoch 1 batch 117/1,245 processed 3,744 batch-loss 41.4235 grad-norm 247.1845 epoch-elapsed 0h05m37s total-elapsed 0h05m37s
+epoch 1 batch 118/1,245 processed 3,776 batch-loss 40.7444 grad-norm 254.8773 epoch-elapsed 0h05m39s total-elapsed 0h05m39s
+epoch 1 batch 119/1,245 processed 3,808 batch-loss 46.0969 grad-norm 347.2676 epoch-elapsed 0h05m42s total-elapsed 0h05m42s
+epoch 1 batch 120/1,245 processed 3,840 batch-loss 42.0092 grad-norm 322.0456 epoch-elapsed 0h05m45s total-elapsed 0h05m45s
+epoch 1 batch 121/1,245 processed 3,872 batch-loss 42.6694 grad-norm 542.9045 epoch-elapsed 0h05m48s total-elapsed 0h05m48s
+epoch 1 batch 122/1,245 processed 3,904 batch-loss 43.5220 grad-norm 520.0480 epoch-elapsed 0h05m51s total-elapsed 0h05m51s
+epoch 1 batch 123/1,245 processed 3,936 batch-loss 38.6609 grad-norm 281.2391 epoch-elapsed 0h05m54s total-elapsed 0h05m54s
+epoch 1 batch 124/1,245 processed 3,968 batch-loss 45.4181 grad-norm 239.4482 epoch-elapsed 0h05m56s total-elapsed 0h05m56s
+epoch 1 batch 125/1,245 processed 4,000 batch-loss 51.0119 grad-norm 253.0020 epoch-elapsed 0h06m00s total-elapsed 0h06m00s
+epoch 1 batch 126/1,245 processed 4,032 batch-loss 40.3826 grad-norm 287.1474 epoch-elapsed 0h06m03s total-elapsed 0h06m03s
+epoch 1 batch 127/1,245 processed 4,064 batch-loss 45.7558 grad-norm 284.3392 epoch-elapsed 0h06m06s total-elapsed 0h06m06s
+epoch 1 batch 128/1,245 processed 4,096 batch-loss 43.0563 grad-norm 303.8261 epoch-elapsed 0h06m09s total-elapsed 0h06m09s
+epoch 1 batch 129/1,245 processed 4,128 batch-loss 38.1113 grad-norm 403.7216 epoch-elapsed 0h06m12s total-elapsed 0h06m12s
+epoch 1 batch 130/1,245 processed 4,160 batch-loss 43.7276 grad-norm 363.2824 epoch-elapsed 0h06m15s total-elapsed 0h06m15s
+epoch 1 batch 131/1,245 processed 4,192 batch-loss 33.2086 grad-norm 227.2099 epoch-elapsed 0h06m18s total-elapsed 0h06m18s
+epoch 1 batch 132/1,245 processed 4,224 batch-loss 43.4405 grad-norm 296.8857 epoch-elapsed 0h06m21s total-elapsed 0h06m21s
+epoch 1 batch 133/1,245 processed 4,256 batch-loss 47.6402 grad-norm 336.4253 epoch-elapsed 0h06m23s total-elapsed 0h06m23s
+epoch 1 batch 134/1,245 processed 4,288 batch-loss 43.1842 grad-norm 288.8196 epoch-elapsed 0h06m26s total-elapsed 0h06m26s
+epoch 1 batch 135/1,245 processed 4,320 batch-loss 33.4423 grad-norm 279.9220 epoch-elapsed 0h06m29s total-elapsed 0h06m29s
+epoch 1 batch 136/1,245 processed 4,352 batch-loss 35.0253 grad-norm 430.7562 epoch-elapsed 0h06m32s total-elapsed 0h06m32s
+epoch 1 batch 137/1,245 processed 4,384 batch-loss 48.0403 grad-norm 436.7745 epoch-elapsed 0h06m35s total-elapsed 0h06m35s
+epoch 1 batch 138/1,245 processed 4,416 batch-loss 38.5300 grad-norm 191.2380 epoch-elapsed 0h06m38s total-elapsed 0h06m38s
+epoch 1 batch 139/1,245 processed 4,448 batch-loss 38.7390 grad-norm 478.9873 epoch-elapsed 0h06m41s total-elapsed 0h06m41s
+epoch 1 batch 140/1,245 processed 4,480 batch-loss 41.8561 grad-norm 270.1009 epoch-elapsed 0h06m44s total-elapsed 0h06m44s
+epoch 1 batch 141/1,245 processed 4,512 batch-loss 43.5669 grad-norm 305.0526 epoch-elapsed 0h06m47s total-elapsed 0h06m47s
+epoch 1 batch 142/1,245 processed 4,544 batch-loss 37.1749 grad-norm 270.1420 epoch-elapsed 0h06m50s total-elapsed 0h06m50s
+epoch 1 batch 143/1,245 processed 4,576 batch-loss 45.9945 grad-norm 428.8009 epoch-elapsed 0h06m53s total-elapsed 0h06m53s
+epoch 1 batch 144/1,245 processed 4,608 batch-loss 34.4507 grad-norm 324.4299 epoch-elapsed 0h06m56s total-elapsed 0h06m56s
+epoch 1 batch 145/1,245 processed 4,640 batch-loss 40.4803 grad-norm 286.2265 epoch-elapsed 0h06m59s total-elapsed 0h06m59s
+epoch 1 batch 146/1,245 processed 4,672 batch-loss 40.0431 grad-norm 268.8495 epoch-elapsed 0h07m02s total-elapsed 0h07m02s
+epoch 1 batch 147/1,245 processed 4,704 batch-loss 39.7473 grad-norm 269.0006 epoch-elapsed 0h07m05s total-elapsed 0h07m05s
+epoch 1 batch 148/1,245 processed 4,736 batch-loss 30.5185 grad-norm 351.4596 epoch-elapsed 0h07m07s total-elapsed 0h07m07s
+epoch 1 batch 149/1,245 processed 4,768 batch-loss 33.4122 grad-norm 321.6974 epoch-elapsed 0h07m09s total-elapsed 0h07m09s
+epoch 1 batch 150/1,245 processed 4,800 batch-loss 37.1994 grad-norm 228.3340 epoch-elapsed 0h07m12s total-elapsed 0h07m12s
+epoch 1 batch 151/1,245 processed 4,832 batch-loss 34.3518 grad-norm 188.3725 epoch-elapsed 0h07m15s total-elapsed 0h07m15s
+epoch 1 batch 152/1,245 processed 4,864 batch-loss 35.4322 grad-norm 268.5643 epoch-elapsed 0h07m18s total-elapsed 0h07m18s
+epoch 1 batch 153/1,245 processed 4,896 batch-loss 44.0680 grad-norm 284.9079 epoch-elapsed 0h07m21s total-elapsed 0h07m21s
+epoch 1 batch 154/1,245 processed 4,928 batch-loss 38.2623 grad-norm 336.6835 epoch-elapsed 0h07m23s total-elapsed 0h07m23s
+epoch 1 batch 155/1,245 processed 4,960 batch-loss 42.0282 grad-norm 336.0626 epoch-elapsed 0h07m27s total-elapsed 0h07m27s
+epoch 1 batch 156/1,245 processed 4,992 batch-loss 30.8959 grad-norm 190.1662 epoch-elapsed 0h07m30s total-elapsed 0h07m30s
+epoch 1 batch 157/1,245 processed 5,024 batch-loss 41.0160 grad-norm 299.6824 epoch-elapsed 0h07m33s total-elapsed 0h07m33s
+epoch 1 batch 158/1,245 processed 5,056 batch-loss 48.7645 grad-norm 260.2773 epoch-elapsed 0h07m36s total-elapsed 0h07m36s
+epoch 1 batch 159/1,245 processed 5,088 batch-loss 27.1040 grad-norm 190.5307 epoch-elapsed 0h07m39s total-elapsed 0h07m39s
+epoch 1 batch 160/1,245 processed 5,120 batch-loss 46.0645 grad-norm 381.3768 epoch-elapsed 0h07m42s total-elapsed 0h07m42s
+epoch 1 batch 161/1,245 processed 5,152 batch-loss 38.9689 grad-norm 337.6056 epoch-elapsed 0h07m45s total-elapsed 0h07m45s
+epoch 1 batch 162/1,245 processed 5,184 batch-loss 37.4742 grad-norm 196.0453 epoch-elapsed 0h07m48s total-elapsed 0h07m48s
+epoch 1 batch 163/1,245 processed 5,216 batch-loss 37.1649 grad-norm 263.7480 epoch-elapsed 0h07m51s total-elapsed 0h07m51s
+epoch 1 batch 164/1,245 processed 5,248 batch-loss 38.5267 grad-norm 348.4438 epoch-elapsed 0h07m54s total-elapsed 0h07m54s
+epoch 1 batch 165/1,245 processed 5,280 batch-loss 43.8646 grad-norm 312.5726 epoch-elapsed 0h07m57s total-elapsed 0h07m57s
+epoch 1 batch 166/1,245 processed 5,312 batch-loss 42.7458 grad-norm 386.4877 epoch-elapsed 0h08m01s total-elapsed 0h08m01s
+epoch 1 batch 167/1,245 processed 5,344 batch-loss 35.2586 grad-norm 276.4325 epoch-elapsed 0h08m04s total-elapsed 0h08m04s
+epoch 1 batch 168/1,245 processed 5,376 batch-loss 35.2804 grad-norm 172.6548 epoch-elapsed 0h08m07s total-elapsed 0h08m07s
+epoch 1 batch 169/1,245 processed 5,408 batch-loss 32.9771 grad-norm 256.4000 epoch-elapsed 0h08m10s total-elapsed 0h08m10s
+epoch 1 batch 170/1,245 processed 5,440 batch-loss 46.3732 grad-norm 265.5153 epoch-elapsed 0h08m13s total-elapsed 0h08m13s
+epoch 1 batch 171/1,245 processed 5,472 batch-loss 27.5678 grad-norm 299.6999 epoch-elapsed 0h08m16s total-elapsed 0h08m16s
+epoch 1 batch 172/1,245 processed 5,504 batch-loss 39.2886 grad-norm 297.5714 epoch-elapsed 0h08m18s total-elapsed 0h08m18s
+epoch 1 batch 173/1,245 processed 5,536 batch-loss 32.5397 grad-norm 202.2899 epoch-elapsed 0h08m21s total-elapsed 0h08m21s
+epoch 1 batch 174/1,245 processed 5,568 batch-loss 41.4310 grad-norm 218.0896 epoch-elapsed 0h08m24s total-elapsed 0h08m24s
+epoch 1 batch 175/1,245 processed 5,600 batch-loss 39.6671 grad-norm 243.4461 epoch-elapsed 0h08m27s total-elapsed 0h08m27s
+epoch 1 batch 176/1,245 processed 5,632 batch-loss 37.5503 grad-norm 348.0136 epoch-elapsed 0h08m29s total-elapsed 0h08m29s
+epoch 1 batch 177/1,245 processed 5,664 batch-loss 29.1453 grad-norm 230.9410 epoch-elapsed 0h08m31s total-elapsed 0h08m31s
+epoch 1 batch 178/1,245 processed 5,696 batch-loss 39.1029 grad-norm 222.8069 epoch-elapsed 0h08m35s total-elapsed 0h08m35s
+epoch 1 batch 179/1,245 processed 5,728 batch-loss 33.2760 grad-norm 310.9298 epoch-elapsed 0h08m37s total-elapsed 0h08m37s
+epoch 1 batch 180/1,245 processed 5,760 batch-loss 40.3365 grad-norm 249.0765 epoch-elapsed 0h08m41s total-elapsed 0h08m41s
+epoch 1 batch 181/1,245 processed 5,792 batch-loss 36.9197 grad-norm 302.3573 epoch-elapsed 0h08m44s total-elapsed 0h08m44s
+epoch 1 batch 182/1,245 processed 5,824 batch-loss 33.1423 grad-norm 265.9171 epoch-elapsed 0h08m47s total-elapsed 0h08m47s
+epoch 1 batch 183/1,245 processed 5,856 batch-loss 46.6054 grad-norm 308.3533 epoch-elapsed 0h08m51s total-elapsed 0h08m51s
+epoch 1 batch 184/1,245 processed 5,888 batch-loss 37.7339 grad-norm 311.8348 epoch-elapsed 0h08m55s total-elapsed 0h08m55s
+epoch 1 batch 185/1,245 processed 5,920 batch-loss 35.2773 grad-norm 188.1794 epoch-elapsed 0h08m58s total-elapsed 0h08m58s
+epoch 1 batch 186/1,245 processed 5,952 batch-loss 34.1798 grad-norm 225.0928 epoch-elapsed 0h09m00s total-elapsed 0h09m00s
+epoch 1 batch 187/1,245 processed 5,984 batch-loss 30.1991 grad-norm 237.8262 epoch-elapsed 0h09m03s total-elapsed 0h09m03s
+epoch 1 batch 188/1,245 processed 6,016 batch-loss 32.0932 grad-norm 242.7533 epoch-elapsed 0h09m05s total-elapsed 0h09m05s
+epoch 1 batch 189/1,245 processed 6,048 batch-loss 32.1656 grad-norm 342.5518 epoch-elapsed 0h09m08s total-elapsed 0h09m08s
+epoch 1 batch 190/1,245 processed 6,080 batch-loss 24.3324 grad-norm 156.7520 epoch-elapsed 0h09m10s total-elapsed 0h09m10s
+epoch 1 batch 191/1,245 processed 6,112 batch-loss 33.0052 grad-norm 233.9582 epoch-elapsed 0h09m14s total-elapsed 0h09m14s
+epoch 1 batch 192/1,245 processed 6,144 batch-loss 31.7400 grad-norm 269.4262 epoch-elapsed 0h09m17s total-elapsed 0h09m17s
+epoch 1 batch 193/1,245 processed 6,176 batch-loss 37.2052 grad-norm 278.5294 epoch-elapsed 0h09m19s total-elapsed 0h09m19s
+epoch 1 batch 194/1,245 processed 6,208 batch-loss 27.4768 grad-norm 208.4482 epoch-elapsed 0h09m22s total-elapsed 0h09m22s
+epoch 1 batch 195/1,245 processed 6,240 batch-loss 25.1559 grad-norm 156.4726 epoch-elapsed 0h09m25s total-elapsed 0h09m25s
+epoch 1 batch 196/1,245 processed 6,272 batch-loss 24.5357 grad-norm 160.3371 epoch-elapsed 0h09m27s total-elapsed 0h09m27s
+epoch 1 batch 197/1,245 processed 6,304 batch-loss 28.7563 grad-norm 319.8272 epoch-elapsed 0h09m30s total-elapsed 0h09m30s
+epoch 1 batch 198/1,245 processed 6,336 batch-loss 38.0651 grad-norm 245.3834 epoch-elapsed 0h09m33s total-elapsed 0h09m33s
+epoch 1 batch 199/1,245 processed 6,368 batch-loss 37.5289 grad-norm 389.6493 epoch-elapsed 0h09m36s total-elapsed 0h09m36s
+epoch 1 batch 200/1,245 processed 6,400 batch-loss 34.0776 grad-norm 164.9580 epoch-elapsed 0h09m40s total-elapsed 0h09m40s
+epoch 1 batch 201/1,245 processed 6,432 batch-loss 39.0155 grad-norm 296.8206 epoch-elapsed 0h09m43s total-elapsed 0h09m43s
+epoch 1 batch 202/1,245 processed 6,464 batch-loss 40.4188 grad-norm 555.2285 epoch-elapsed 0h09m47s total-elapsed 0h09m47s
+epoch 1 batch 203/1,245 processed 6,496 batch-loss 32.8882 grad-norm 296.4576 epoch-elapsed 0h09m49s total-elapsed 0h09m49s
+epoch 1 batch 204/1,245 processed 6,528 batch-loss 34.5490 grad-norm 143.7552 epoch-elapsed 0h09m53s total-elapsed 0h09m53s
+epoch 1 batch 205/1,245 processed 6,560 batch-loss 33.0826 grad-norm 175.1650 epoch-elapsed 0h09m57s total-elapsed 0h09m57s
+epoch 1 batch 206/1,245 processed 6,592 batch-loss 29.2030 grad-norm 147.8133 epoch-elapsed 0h10m00s total-elapsed 0h10m00s
+epoch 1 batch 207/1,245 processed 6,624 batch-loss 30.7051 grad-norm 230.0856 epoch-elapsed 0h10m03s total-elapsed 0h10m03s
+epoch 1 batch 208/1,245 processed 6,656 batch-loss 33.1270 grad-norm 178.5683 epoch-elapsed 0h10m06s total-elapsed 0h10m06s
+epoch 1 batch 209/1,245 processed 6,688 batch-loss 33.0017 grad-norm 335.0864 epoch-elapsed 0h10m10s total-elapsed 0h10m10s
+epoch 1 batch 210/1,245 processed 6,720 batch-loss 32.7012 grad-norm 281.0482 epoch-elapsed 0h10m12s total-elapsed 0h10m12s
+epoch 1 batch 211/1,245 processed 6,752 batch-loss 32.6601 grad-norm 216.2162 epoch-elapsed 0h10m15s total-elapsed 0h10m15s
+epoch 1 batch 212/1,245 processed 6,784 batch-loss 29.5528 grad-norm 259.8227 epoch-elapsed 0h10m19s total-elapsed 0h10m19s
+epoch 1 batch 213/1,245 processed 6,816 batch-loss 25.6200 grad-norm 261.7835 epoch-elapsed 0h10m21s total-elapsed 0h10m21s
+epoch 1 batch 214/1,245 processed 6,848 batch-loss 27.6751 grad-norm 183.8326 epoch-elapsed 0h10m24s total-elapsed 0h10m24s
+epoch 1 batch 215/1,245 processed 6,880 batch-loss 34.6344 grad-norm 264.0070 epoch-elapsed 0h10m28s total-elapsed 0h10m28s
+epoch 1 batch 216/1,245 processed 6,912 batch-loss 33.0342 grad-norm 177.9393 epoch-elapsed 0h10m30s total-elapsed 0h10m30s
+epoch 1 batch 217/1,245 processed 6,944 batch-loss 29.4641 grad-norm 157.1455 epoch-elapsed 0h10m33s total-elapsed 0h10m33s
+epoch 1 batch 218/1,245 processed 6,976 batch-loss 25.8858 grad-norm 183.9122 epoch-elapsed 0h10m35s total-elapsed 0h10m35s
+epoch 1 batch 219/1,245 processed 7,008 batch-loss 30.1925 grad-norm 225.0630 epoch-elapsed 0h10m37s total-elapsed 0h10m37s
+epoch 1 batch 220/1,245 processed 7,040 batch-loss 24.8205 grad-norm 170.2965 epoch-elapsed 0h10m40s total-elapsed 0h10m40s
+epoch 1 batch 221/1,245 processed 7,072 batch-loss 34.9583 grad-norm 216.6518 epoch-elapsed 0h10m43s total-elapsed 0h10m43s
+epoch 1 batch 222/1,245 processed 7,104 batch-loss 32.4324 grad-norm 161.0215 epoch-elapsed 0h10m47s total-elapsed 0h10m47s
+epoch 1 batch 223/1,245 processed 7,136 batch-loss 35.4317 grad-norm 160.6684 epoch-elapsed 0h10m50s total-elapsed 0h10m50s
+epoch 1 batch 224/1,245 processed 7,168 batch-loss 24.5092 grad-norm 181.6478 epoch-elapsed 0h10m52s total-elapsed 0h10m52s
+epoch 1 batch 225/1,245 processed 7,200 batch-loss 19.6248 grad-norm 115.1991 epoch-elapsed 0h10m54s total-elapsed 0h10m54s
+epoch 1 batch 226/1,245 processed 7,232 batch-loss 33.0800 grad-norm 234.8707 epoch-elapsed 0h10m57s total-elapsed 0h10m57s
+epoch 1 batch 227/1,245 processed 7,264 batch-loss 29.5976 grad-norm 169.5643 epoch-elapsed 0h11m00s total-elapsed 0h11m00s
+epoch 1 batch 228/1,245 processed 7,296 batch-loss 23.2775 grad-norm 170.5440 epoch-elapsed 0h11m04s total-elapsed 0h11m04s
+epoch 1 batch 229/1,245 processed 7,328 batch-loss 29.5237 grad-norm 134.6293 epoch-elapsed 0h11m06s total-elapsed 0h11m06s
+epoch 1 batch 230/1,245 processed 7,360 batch-loss 30.8877 grad-norm 154.9019 epoch-elapsed 0h11m09s total-elapsed 0h11m09s
+epoch 1 batch 231/1,245 processed 7,392 batch-loss 33.6603 grad-norm 241.2040 epoch-elapsed 0h11m12s total-elapsed 0h11m12s
+epoch 1 batch 232/1,245 processed 7,424 batch-loss 36.5576 grad-norm 298.9669 epoch-elapsed 0h11m15s total-elapsed 0h11m15s
+epoch 1 batch 233/1,245 processed 7,456 batch-loss 33.2119 grad-norm 588.8344 epoch-elapsed 0h11m18s total-elapsed 0h11m18s
+epoch 1 batch 234/1,245 processed 7,488 batch-loss 20.4428 grad-norm 140.2321 epoch-elapsed 0h11m21s total-elapsed 0h11m21s
+epoch 1 batch 235/1,245 processed 7,520 batch-loss 27.6371 grad-norm 173.4919 epoch-elapsed 0h11m24s total-elapsed 0h11m24s
+epoch 1 batch 236/1,245 processed 7,552 batch-loss 27.7436 grad-norm 179.1823 epoch-elapsed 0h11m27s total-elapsed 0h11m27s
+epoch 1 batch 237/1,245 processed 7,584 batch-loss 24.3654 grad-norm 151.3114 epoch-elapsed 0h11m30s total-elapsed 0h11m30s
+epoch 1 batch 238/1,245 processed 7,616 batch-loss 29.0450 grad-norm 171.9704 epoch-elapsed 0h11m33s total-elapsed 0h11m33s
+epoch 1 batch 239/1,245 processed 7,648 batch-loss 26.0833 grad-norm 227.4807 epoch-elapsed 0h11m35s total-elapsed 0h11m35s
+epoch 1 batch 240/1,245 processed 7,680 batch-loss 27.0024 grad-norm 140.5304 epoch-elapsed 0h11m39s total-elapsed 0h11m39s
+epoch 1 batch 241/1,245 processed 7,712 batch-loss 25.4264 grad-norm 252.4139 epoch-elapsed 0h11m41s total-elapsed 0h11m41s
+epoch 1 batch 242/1,245 processed 7,744 batch-loss 32.0110 grad-norm 277.6691 epoch-elapsed 0h11m44s total-elapsed 0h11m44s
+epoch 1 batch 243/1,245 processed 7,776 batch-loss 24.1075 grad-norm 173.2779 epoch-elapsed 0h11m47s total-elapsed 0h11m47s
+epoch 1 batch 244/1,245 processed 7,808 batch-loss 37.4633 grad-norm 260.9379 epoch-elapsed 0h11m51s total-elapsed 0h11m51s
+epoch 1 batch 245/1,245 processed 7,840 batch-loss 30.1679 grad-norm 189.3693 epoch-elapsed 0h11m54s total-elapsed 0h11m54s
+epoch 1 batch 246/1,245 processed 7,872 batch-loss 21.9720 grad-norm 167.8977 epoch-elapsed 0h11m56s total-elapsed 0h11m56s
+epoch 1 batch 247/1,245 processed 7,904 batch-loss 29.9217 grad-norm 251.6338 epoch-elapsed 0h11m59s total-elapsed 0h11m59s
+epoch 1 batch 248/1,245 processed 7,936 batch-loss 22.6765 grad-norm 180.6940 epoch-elapsed 0h12m02s total-elapsed 0h12m02s
+epoch 1 batch 249/1,245 processed 7,968 batch-loss 27.8067 grad-norm 228.9894 epoch-elapsed 0h12m05s total-elapsed 0h12m05s
+epoch 1 batch 250/1,245 processed 8,000 batch-loss 29.8938 grad-norm 267.1786 epoch-elapsed 0h12m08s total-elapsed 0h12m08s
+epoch 1 batch 251/1,245 processed 8,032 batch-loss 34.9600 grad-norm 250.0815 epoch-elapsed 0h12m12s total-elapsed 0h12m12s
+epoch 1 batch 252/1,245 processed 8,064 batch-loss 25.9092 grad-norm 221.4576 epoch-elapsed 0h12m14s total-elapsed 0h12m14s
+epoch 1 batch 253/1,245 processed 8,096 batch-loss 25.5446 grad-norm 144.5919 epoch-elapsed 0h12m17s total-elapsed 0h12m17s
+epoch 1 batch 254/1,245 processed 8,128 batch-loss 28.4267 grad-norm 159.2142 epoch-elapsed 0h12m20s total-elapsed 0h12m20s
+epoch 1 batch 255/1,245 processed 8,160 batch-loss 30.7278 grad-norm 303.6713 epoch-elapsed 0h12m24s total-elapsed 0h12m24s
+epoch 1 batch 256/1,245 processed 8,192 batch-loss 20.5104 grad-norm 235.0592 epoch-elapsed 0h12m27s total-elapsed 0h12m27s
+epoch 1 batch 257/1,245 processed 8,224 batch-loss 23.0280 grad-norm 121.2479 epoch-elapsed 0h12m29s total-elapsed 0h12m29s
+epoch 1 batch 258/1,245 processed 8,256 batch-loss 30.0188 grad-norm 225.8217 epoch-elapsed 0h12m33s total-elapsed 0h12m33s

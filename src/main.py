@@ -313,7 +313,9 @@ def run_train(args, hparams):
     print("Training...")
     total_processed = 0
     current_processed = 0
+    current_index_processed = 0
     check_every = len(train_parse) / args.checks_per_epoch
+    reindex_every = len(train_parse) / args.reindexes_per_epoch
     best_dev_fscore = -np.inf
     best_dev_model_path = None
     best_dev_processed = 0
@@ -409,6 +411,7 @@ def run_train(args, hparams):
                 del loss
                 total_processed += len(subbatch_trees)
                 current_processed += len(subbatch_trees)
+                current_index_processed += len(subbatch_trees)
 
             grad_norm = torch.nn.utils.clip_grad_norm_(clippable_parameters, grad_clip_threshold)
 
@@ -436,6 +439,8 @@ def run_train(args, hparams):
             if current_processed >= check_every:
                 current_processed -= check_every
                 check_dev()
+            if current_index_processed >= reindex_every:
+                current_index_processed -= reindex_every
                 if span_index is not None:
                     # recompute span_index
                     reindex_time = time.time()
@@ -799,6 +804,7 @@ def main():
     subparser.add_argument("--train-through-nn", action="store_true",
         help="train through nn")
     subparser.add_argument("--index-devid", type=int, default=0)
+    subparser.add_argument("--reindexes-per-epoch", type=int, default=4)
 
     subparser = subparsers.add_parser("test")
     subparser.set_defaults(callback=run_test)
