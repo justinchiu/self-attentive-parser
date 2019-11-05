@@ -458,7 +458,7 @@ def run_train(args, hparams):
                     prefix = index.get_index_prefix(
                         index_base_path = args.index_path,
                         full_model_path = args.model_path_base,
-                        nn_prefix = args.nn_prefix + "HI",
+                        nn_prefix = args.save_nn_prefix,
                     )
                     span_index.to(-1)
                     print(f"Saving recomputed index")
@@ -801,6 +801,7 @@ def main():
     subparser.add_argument("--library", default="faiss", choices=["faiss", "annoy"])
     subparser.add_argument("--index-path", default="index")
     subparser.add_argument("--nn-prefix", default="all_spans")
+    subparser.add_argument("--save-nn-prefix", default="all_spans")
     subparser.add_argument("--k", type=int, default=8)
     subparser.add_argument("--train-through-nn", action="store_true",
         help="train through nn")
