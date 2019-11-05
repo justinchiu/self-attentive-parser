@@ -69,6 +69,9 @@ def chart_torch(T, N, labels, distances, flat_indices, chart_weight):
         dim_size = N,
         fill_value = float("-inf"),
     )
+    # filter nans, which result if the only distance = -inf,
+    # since...-inf - -inf = NaN in scatter.py when extracting the max
+    cells[cells != cells] = float("-inf")
     flat_chart = torch.zeros((T+1) * (T+1), N, device=distances.device)
     flat_chart.fill_(float("-inf"))
     flat_chart = flat_chart.scatter(
@@ -78,8 +81,8 @@ def chart_torch(T, N, labels, distances, flat_indices, chart_weight):
     )
     mask = flat_chart > float("-inf")
     filler = chart_weight.to(flat_chart.device).expand_as(flat_chart).masked_fill(mask, float("-inf"))
-    flat_chart = torch.stack((flat_chart, filler), -1).logsumexp(-1)
-    return flat_chart.view(T+1, T+1, flat_chart.shape[-1])
+    flat_chart0 = torch.stack((flat_chart, filler), -1).logsumexp(-1)
+    return flat_chart0.view(T+1, T+1, flat_chart0.shape[-1])
 
 
 def get_index_prefix(index_base_path, full_model_path, nn_prefix):
@@ -97,6 +100,7 @@ def get_index_paths(prefix, num_indices, library):
     key_suffix = ".key" + suffix + ".npy"
     label_suffix = ".label" + suffix + ".npy"
     labelkey_suffix = ".label2key" + suffix + ".npy"
+    senidx_suffix = ".senidx" + suffix + ".npy"
 
     return (
         prefix.with_suffix(nn_suffix),
@@ -104,6 +108,7 @@ def get_index_paths(prefix, num_indices, library):
         prefix.with_suffix(key_suffix),
         prefix.with_suffix(label_suffix),
         prefix.with_suffix(labelkey_suffix),
+        prefix.with_suffix(senidx_suffix),
     )
 
     """
@@ -174,6 +179,8 @@ def init_faiss(dim, metric, num_labels, pca=False, in_dim=2000):
         [],
         # label to key idxs
         [[] for _ in range(num_labels)],
+        # sen_idxs
+        [],
     )
 
 init_fns = {
@@ -317,6 +324,7 @@ class FaissIndex:
             del self.keys
             del self.labels
             del self.label2keys
+            del self.sen_idxs
         if hasattr(self, "res"):
             del self.res
         (
@@ -325,6 +333,7 @@ class FaissIndex:
             self.keys,
             self.labels,
             self.label2keys,
+            self.sen_idxs,
         ) = init_faiss(self.dim, self.metric, self.num_labels)
         gc.collect()
         self.res = None
@@ -352,12 +361,14 @@ class FaissIndex:
             lbl = value.label_idx
             self.labels.append(lbl)
             self.label2keys[lbl].append(N+i)
+            self.sen_idxs.append(value.sen_idx)
 
     def build(self):
         self.raw_index.train(self.keys)
         self.raw_index.add(self.keys)
 
         self.labels = np.array(self.labels)
+        self.sen_idxs = np.array(self.sen_idxs)
         #self.label2keys = [np.array(xs) for xs in self.label2keys]
 
     # can mess with this later
@@ -371,14 +382,18 @@ class FaissIndex:
         nn_keys = self.keys[I]
         return labels, -D if self.metric == "l2" else D, nn_keys
 
-    def topk_torch(self, keys, k, label_only=True):
+    def topk_torch(self, keys, k, label_only=True, sen_idx=None):
         D, I = search_index_pytorch(self.raw_index, keys, k)
         I_np = I.detach().cpu().numpy()
         labels = torch.from_numpy(self.labels[I_np]).to(keys.device)
         # if self.keys: torch
         #nn_keys = self.keys[I].to(keys.device)
         nn_keys = torch.from_numpy(self.keys[I_np]).to(keys.device)
-        return labels, -D if self.metric == "l2" else D, nn_keys
+        mask = (
+            torch.from_numpy(self.sen_idxs[I_np] == sen_idx).to(keys.device)
+            if sen_idx is not None else None
+        )
+        return labels, -D if self.metric == "l2" else D, nn_keys, mask
 
     def topk_torch_np(self, keys, k, label_only=True):
         D, I = search_index_pytorch(self.raw_index, keys, k)
@@ -392,19 +407,34 @@ class FaissIndex:
         assert self.prefix or prefix, "One of self.prefix or prefix must not be None"
         prefix = self.prefix if prefix is None else prefix
 
-        ann_name, info_name, key_name, label_name, labelkey_name = get_index_paths(prefix, self.num_labels, "faiss")
+        (
+            ann_name,
+            info_name,
+            key_name,
+            label_name,
+            labelkey_name,
+            senidx_name,
+        ) = get_index_paths(prefix, self.num_labels, "faiss")
         self.raw_index = faiss.read_index(str(ann_name))
         self.raw_span_infos = pickle.load(open(str(info_name), "rb"))
         self.keys = np.load(key_name)
         self.labels = np.load(label_name)
         with open(labelkey_name, "rb") as f:
             self.label2keys = pickle.load(f)
+        self.sen_idxs = np.load(senidx_name)
 
     def save(self, prefix=None):
         assert self.prefix or prefix, "One of self.prefix or prefix must not be None"
         prefix = self.prefix if prefix is None else prefix
 
-        ann_name, info_name, key_name, label_name, labelkey_name = get_index_paths(prefix, self.num_labels, "faiss")
+        (
+            ann_name,
+            info_name,
+            key_name,
+            label_name,
+            labelkey_name,
+            senidx_name,
+        ) = get_index_paths(prefix, self.num_labels, "faiss")
         ann_name.parent.mkdir(parents=True, exist_ok=True)
         faiss.write_index(self.raw_index, str(ann_name))
         pickle.dump(self.raw_span_infos, open(info_name, "wb"))
@@ -413,6 +443,7 @@ class FaissIndex:
         np.save(label_name, self.labels)
         with open(labelkey_name, "wb") as f:
             pickle.dump(self.label2keys, f)
+        np.save(senidx_name, self.sen_idxs)
 
     def to(self, device):
         if device == self.device:

@@ -1331,6 +1331,7 @@ class NKChartParser(nn.Module):
                     span_index = span_index,
                     zero_empty = zero_empty,
                     k = k,
+                    sen_idx = golds[i].idx,
                 ) if span_index is not None else None
                 # TODO: FIX BACKPROP THROUGH CHART
                 # get viterbi tree and gold tree span indices
@@ -1495,6 +1496,7 @@ class NKChartParser(nn.Module):
         span_index = None,
         zero_empty = False,
         k = None,
+        sen_idx = None,
     ):
         # Note that the bias added to the final layer norm is useless because
         # this subtraction gets rid of it
@@ -1518,11 +1520,22 @@ class NKChartParser(nn.Module):
             flat_indices = left * (T+1) + right
             queries = span_reps[left, right]
             # for now
-            labels, distances, keys = span_index.topk_torch(queries, k)
+            labels, distances, keys, mask = span_index.topk_torch(queries, k, sen_idx = sen_idx)
             # redo distances using keys
             dists = -(queries.unsqueeze(1) - keys).pow(2).sum(-1)
-            chart = chart_torch(T, len(self.label_vocab.values), labels, dists, flat_indices, self.chart_weight)
-            return chart * seltf.label_weights if self.use_label_weights else chart
+            masked_dists = dists.masked_fill(mask, float("-inf"))
+            chart = chart_torch(
+                T,
+                len(self.label_vocab.values),
+                labels,
+                masked_dists,
+                flat_indices,
+                self.chart_weight,
+            )
+            if self.zero_empty:
+                # copy paste below
+                raise NotImplementedError
+            return chart * selt.label_weights if self.use_label_weights else chart
 
         # if no span_index, proceed as normal
         #label_scores_chart = self.label_proj(span_reps)

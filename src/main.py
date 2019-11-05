@@ -172,7 +172,9 @@ def run_train(args, hparams):
 
     char_set = set()
 
-    for tree in train_parse:
+    for idx, tree in enumerate(train_parse):
+        tree.idx = idx
+        # augment each node with index?
         nodes = [tree]
         while nodes:
             node = nodes.pop()
@@ -183,7 +185,6 @@ def run_train(args, hparams):
                 tag_vocab.index(node.tag)
                 word_vocab.index(node.word)
                 char_set |= set(node.word)
-
     char_vocab = vocabulary.Vocabulary()
 
     # If codepoints are small (e.g. Latin alphabet), index by codepoint directly
