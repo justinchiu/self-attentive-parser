@@ -10,4 +10,5 @@ CUDA_VISIBLE_DEVICES=$1 python src/main.py train \
     --metric l2 \
     --index-path index --nn-prefix nl2-base --k 32 \
     --library faiss --use-neighbours --train-through-nn \
+    --save-nn-prefix nl2-base-nn \
     --index-devid 0 | tee base-nl2-nn.log

@@ -49,6 +49,23 @@ def format_elapsed(start_time):
         elapsed_string = "{}d{}".format(days, elapsed_string)
     return elapsed_string
 
+def gen_label_vocab(treebank):
+    label_vocab = vocabulary.Vocabulary()
+    label_vocab.index(())
+
+    for idx, tree in enumerate(treebank):
+        tree.idx = idx
+        # augment each node with index?
+        nodes = [tree]
+        while nodes:
+            node = nodes.pop()
+            if isinstance(node, trees.InternalParseNode):
+                label_vocab.index(node.label)
+                nodes.extend(reversed(node.children))
+
+    label_vocab.freeze()
+    return label_vocab
+
 def make_hparams():
     return nkutil.HParams(
         max_len_train=0, # no length limit
@@ -485,6 +502,12 @@ def run_test(args):
     assert 'hparams' in info['spec'], "Older savefiles not supported"
     parser = parse_jc.NKChartParser.from_spec(info['spec'], info['state_dict'])
 
+    if args.redo_vocab:
+        print("Loading memory bank trees from {} for generating label vocab..."
+            .format(args.train_path))
+        train_treebank = trees.load_trees(args.train_path)
+        parser.label_vocab = gen_label_vocab([tree.convert() for tree in train_treebank])
+
     print("Parsing test sentences...")
     start_time = time.time()
 
@@ -724,6 +747,9 @@ def run_index(args):
     print("Getting labelled span representations")
     start_time = time.time()
 
+    if args.redo_vocab:
+        parser.label_vocab = gen_label_vocab([tree.convert() for tree in train_treebank])
+
     num_labels = len(parser.label_vocab.values)
 
     """
@@ -743,7 +769,8 @@ def run_index(args):
     print(f"rep-time: {format_elapsed(rep_time)}")
     # clean up later, refactor back into index.py
     build_time = time.time()
-    use_gpu = True
+    #use_gpu = True
+    use_gpu = False
     print(f"Using gpu: {use_gpu}")
     if args.library == "faiss":
         if use_gpu:
@@ -812,6 +839,7 @@ def main():
     subparser.set_defaults(callback=run_test)
     subparser.add_argument("--model-path-base", required=True)
     subparser.add_argument("--evalb-dir", default="EVALB/")
+    subparser.add_argument("--train-path", default="data/02-21.10way.clean")
     subparser.add_argument("--test-path", default="data/23.auto.clean")
     subparser.add_argument("--test-path-raw", type=str)
     subparser.add_argument("--eval-batch-size", type=int, default=100)
@@ -824,6 +852,8 @@ def main():
     subparser.add_argument("--zero-empty", action="store_true")
     subparser.add_argument("--no-relu", action="store_true",
         help="remove relu from chart mlp")
+    subparser.add_argument("--redo-vocab", action="store_true",
+        help="Redo vocab if using out of domain data",)
 
     subparser = subparsers.add_parser("ensemble")
     subparser.set_defaults(callback=run_ensemble)
@@ -863,6 +893,8 @@ def main():
         help="remove relu from chart mlp")
     subparser.add_argument("--pca", action="store_true",
         help="Perform PCA on span reps for dim red")
+    subparser.add_argument("--redo-vocab", action="store_true",
+        help="Redo vocab if using out of domain data",)
 
     args = parser.parse_args()
     args.callback(args)

@@ -11,5 +11,6 @@ CUDA_VISIBLE_DEVICES=$1 python src/main.py train \
     --index-path index \
     --nn-prefix nl2-multi --k 32 \
     --library faiss --use-neighbours --train-through-nn \
+    --save-nn-prefix nl2-multi-nn \
     --index-devid 0 \
     | tee multi_nl2_nn.log
